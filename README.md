@@ -203,3 +203,16 @@ Role discovery uses public APIs — no authentication required:
 
 Companies using unsupported ATS types are surfaced with their career page URL
 so you can check them manually.
+
+### Planned ATS support
+
+**Workday** — Many large companies (e.g. Zillow, Salesforce, Nike) use Workday.
+The public REST endpoint follows the pattern:
+`https://<tenant>.myworkdayjobs.com/wday/cxs/<tenant>/<board>/jobs`
+Each company has a unique tenant and board token (e.g. `Zillow_Group_External`) that
+can be extracted from their career page URL. A `WorkdayFetcher` should:
+1. Parse the tenant and board token from `career_page_url` in `DiscoveredCompany`
+2. POST to the Workday jobs endpoint with standard pagination params
+3. Map the response fields to `DiscoveredRole` (title, location, posted date, apply URL)
+
+See `jobfinder/roles/ats/greenhouse.py` for a reference implementation to follow.

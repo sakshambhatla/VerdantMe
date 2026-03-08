@@ -4,6 +4,8 @@ import json
 import os
 
 from jobfinder.config import AppConfig, RoleFilters
+from jobfinder.roles.checkpoint import Checkpoint
+from jobfinder.roles.errors import RateLimitError
 from jobfinder.storage.schemas import DiscoveredRole
 from jobfinder.utils.display import console
 
@@ -90,12 +92,15 @@ def _call_anthropic(prompt: str, system_prompt: str, config: AppConfig) -> str:
     import anthropic
 
     client = anthropic.Anthropic()
-    response = client.messages.create(
-        model=config.anthropic_model,
-        max_tokens=512,
-        system=system_prompt,
-        messages=[{"role": "user", "content": prompt}],
-    )
+    try:
+        response = client.messages.create(
+            model=config.anthropic_model,
+            max_tokens=512,
+            system=system_prompt,
+            messages=[{"role": "user", "content": prompt}],
+        )
+    except anthropic.RateLimitError as exc:
+        raise RateLimitError(str(exc)) from exc
     return response.content[0].text
 
 
@@ -105,13 +110,19 @@ def _call_gemini(prompt: str, system_prompt: str, config: AppConfig) -> str:
 
     from google import genai
     from google.genai import types
+    from google.genai.errors import ClientError
 
     client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY", ""))
-    response = client.models.generate_content(
-        model=config.gemini_model,
-        contents=prompt,
-        config=types.GenerateContentConfig(system_instruction=system_prompt),
-    )
+    try:
+        response = client.models.generate_content(
+            model=config.gemini_model,
+            contents=prompt,
+            config=types.GenerateContentConfig(system_instruction=system_prompt),
+        )
+    except ClientError as exc:
+        if exc.status_code == 429:
+            raise RateLimitError(str(exc)) from exc
+        raise
     return response.text
 
 
@@ -132,31 +143,66 @@ def filter_roles(
     roles: list[DiscoveredRole],
     filters: RoleFilters,
     config: AppConfig,
+    *,
+    checkpoint: Checkpoint | None = None,
+    resume_batches: int = 0,
+    resume_kept: list[DiscoveredRole] | None = None,
 ) -> list[DiscoveredRole]:
-    """Apply LLM-based filters to a list of roles. Returns only high-confidence matches."""
+    """Apply LLM-based filters to a list of roles. Returns only high-confidence matches.
+
+    Args:
+        roles: Full list of raw roles to filter.
+        filters: Filter criteria from config or request.
+        config: App configuration (model provider, etc.).
+        checkpoint: If set, saves progress after each batch so the run can be resumed.
+        resume_batches: Skip this many already-processed batches (used when resuming).
+        resume_kept: Roles already matched in previously completed batches.
+    """
     active = {k: v for k, v in filters.model_dump().items() if v is not None}
     if not active:
         return roles
 
     filter_desc = ", ".join(f"{k}={v!r}" for k, v in active.items())
-    console.print(
-        f"\nFiltering [bold]{len(roles)}[/bold] roles with: {filter_desc}"
-    )
+    total_batches = (len(roles) + BATCH_SIZE - 1) // BATCH_SIZE
 
-    matched: list[DiscoveredRole] = []
-    for batch_start in range(0, len(roles), BATCH_SIZE):
+    matched: list[DiscoveredRole] = list(resume_kept or [])
+
+    if resume_batches > 0:
+        console.print(
+            f"\nResuming filter from batch {resume_batches + 1}/{total_batches} "
+            f"({len(matched)} roles matched so far)..."
+        )
+    else:
+        console.print(f"\nFiltering [bold]{len(roles)}[/bold] roles with: {filter_desc}")
+
+    start_offset = resume_batches * BATCH_SIZE
+
+    for batch_start in range(start_offset, len(roles), BATCH_SIZE):
         batch = roles[batch_start : batch_start + BATCH_SIZE]
         batch_num = batch_start // BATCH_SIZE + 1
-        total_batches = (len(roles) + BATCH_SIZE - 1) // BATCH_SIZE
 
         with console.status(
             f"  Batch {batch_num}/{total_batches} ({len(batch)} roles)..."
         ):
             prompt = _build_prompt(batch, filters)
-            indices = _call_llm(prompt, filters, config)
+            try:
+                indices = _call_llm(prompt, filters, config)
+            except RateLimitError as exc:
+                # Checkpoint progress before propagating so the caller can resume
+                if checkpoint:
+                    checkpoint.save_filter_batch(batch_num - 1, matched)
+                raise RateLimitError(
+                    f"Rate limit hit at filter batch {batch_num}/{total_batches}. "
+                    f"{len(matched)} roles matched so far. "
+                    f"Progress saved — use 'Continue from previous run' to resume."
+                ) from exc
 
         for i in indices:
             if 0 <= i < len(batch):
                 matched.append(batch[i])
+
+        # Save progress after each successful batch
+        if checkpoint:
+            checkpoint.save_filter_batch(batch_num, matched)
 
     return matched

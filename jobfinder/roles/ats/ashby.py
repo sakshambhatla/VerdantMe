@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
+import httpx
+
 from jobfinder.roles.ats.base import ATSFetchError, BaseFetcher
 from jobfinder.storage.schemas import DiscoveredCompany, DiscoveredRole
 from jobfinder.utils.http import get_json
@@ -19,9 +21,19 @@ class AshbyFetcher(BaseFetcher):
             )
 
         url = BASE_URL.format(board_token=company.ats_board_token)
-        data = get_json(
-            url, timeout=timeout, params={"includeCompensation": "true"}
-        )
+        try:
+            data = get_json(
+                url, timeout=timeout, params={"includeCompensation": "true"}
+            )
+        except httpx.HTTPStatusError as exc:
+            raise ATSFetchError(
+                f"Ashby API returned HTTP {exc.response.status_code} for {company.name} "
+                f"(token: {company.ats_board_token!r}) — company may not use Ashby"
+            ) from exc
+        except httpx.TransportError as exc:
+            raise ATSFetchError(
+                f"Ashby API unreachable for {company.name}: {exc}"
+            ) from exc
         now = datetime.now(timezone.utc).isoformat()
 
         roles = []

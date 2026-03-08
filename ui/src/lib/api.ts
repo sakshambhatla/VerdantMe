@@ -100,8 +100,19 @@ export interface RoleFiltersParams {
 export interface DiscoverRolesParams {
   company?: string;
   refresh?: boolean;
+  resume?: boolean;
   role_filters?: RoleFiltersParams;
   relevance_score_criteria?: string;
+}
+
+export interface RolesCheckpoint {
+  exists: boolean;
+  phase: string;
+  filter_batches_done: number;
+  filter_total_batches: number;
+  raw_roles_count: number;
+  filter_kept_count: number;
+  summary: string;
 }
 
 export async function discoverRoles(params: DiscoverRolesParams): Promise<RolesResponse> {
@@ -112,4 +123,13 @@ export async function discoverRoles(params: DiscoverRolesParams): Promise<RolesR
 export async function getRoles(): Promise<RolesResponse> {
   const { data } = await api.get<RolesResponse>("/roles");
   return data;
+}
+
+export async function getRolesCheckpoint(): Promise<RolesCheckpoint | null> {
+  try {
+    const { data } = await api.get<RolesCheckpoint>("/roles/checkpoint");
+    return data;
+  } catch {
+    return null;
+  }
 }

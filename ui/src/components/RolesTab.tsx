@@ -8,7 +8,13 @@ import {
   createColumnHelper,
   type SortingState,
 } from "@tanstack/react-table";
-import { discoverRoles, getRoles, type DiscoveredRole, type FlaggedCompany } from "@/lib/api";
+import {
+  discoverRoles,
+  getRoles,
+  getRolesCheckpoint,
+  type DiscoveredRole,
+  type FlaggedCompany,
+} from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -181,10 +187,19 @@ export function RolesTab() {
     retry: false,
   });
 
+  // Poll for checkpoint existence so we can show the "Continue" banner
+  const { data: checkpoint } = useQuery({
+    queryKey: ["roles-checkpoint"],
+    queryFn: getRolesCheckpoint,
+    retry: false,
+    refetchInterval: false,
+  });
+
   const discover = useMutation({
-    mutationFn: () => {
+    mutationFn: (resume: boolean) => {
       const hasFilters = titleFilter || locationFilter || postedAfter;
       return discoverRoles({
+        resume,
         refresh: true,
         role_filters: hasFilters
           ? {
@@ -199,10 +214,14 @@ export function RolesTab() {
     },
     onSuccess: (data) => {
       qc.setQueryData(["roles"], data);
+      qc.setQueryData(["roles-checkpoint"], null);
       setError(null);
     },
     onError: (err: { response?: { data?: { detail?: string } }; message: string }) => {
-      setError(err.response?.data?.detail ?? err.message);
+      const detail = err.response?.data?.detail ?? err.message;
+      setError(detail);
+      // Refresh checkpoint status so "Continue" banner appears
+      qc.invalidateQueries({ queryKey: ["roles-checkpoint"] });
     },
   });
 
@@ -212,6 +231,31 @@ export function RolesTab() {
 
   return (
     <div className="space-y-6">
+      {/* Checkpoint / resume banner */}
+      {checkpoint && !discover.isPending && (
+        <div
+          className="rounded-xl border px-4 py-3 flex items-center justify-between gap-4"
+          style={{
+            background: "rgba(59,130,246,0.12)",
+            backdropFilter: "blur(8px)",
+            WebkitBackdropFilter: "blur(8px)",
+            borderColor: "rgba(59,130,246,0.30)",
+          }}
+        >
+          <div>
+            <p className="text-sm font-medium text-blue-200">⏸ Previous run saved</p>
+            <p className="text-xs text-blue-300/80 mt-0.5">{checkpoint.summary}</p>
+          </div>
+          <Button
+            onClick={() => discover.mutate(true)}
+            disabled={discover.isPending}
+            className="shrink-0 bg-blue-500/20 border-blue-400/30 text-blue-200 hover:bg-blue-500/35"
+          >
+            Continue from previous run
+          </Button>
+        </div>
+      )}
+
       {/* Filter form */}
       <Card>
         <CardContent className="pt-6">
@@ -255,7 +299,7 @@ export function RolesTab() {
           </div>
           <div className="mt-4">
             <Button
-              onClick={() => discover.mutate()}
+              onClick={() => discover.mutate(false)}
               disabled={discover.isPending}
             >
               {discover.isPending ? (

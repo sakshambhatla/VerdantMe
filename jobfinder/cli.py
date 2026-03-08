@@ -174,16 +174,25 @@ def discover_companies(
     default=False,
     help="Re-fetch roles even if roles.json exists",
 )
+@click.option(
+    "--continue", "resume",
+    is_flag=True,
+    default=False,
+    help="Resume from a previous run that was interrupted by a rate-limit error",
+)
 @click.pass_context
 def discover_roles_cmd(
-    ctx: click.Context, company: str | None, refresh: bool
+    ctx: click.Context, company: str | None, refresh: bool, resume: bool
 ) -> None:
     """Read open roles from discovered companies' career pages via public ATS APIs."""
+    from jobfinder.roles.checkpoint import CHECKPOINT_FILENAME, Checkpoint
     from jobfinder.roles.discovery import discover_roles
-    from jobfinder.storage.schemas import DiscoveredCompany
+    from jobfinder.roles.errors import RateLimitError
+    from jobfinder.storage.schemas import DiscoveredCompany, DiscoveredRole
 
     config = load_config(ctx.obj["config_path"])
     store = StorageManager(config.data_dir)
+    cp = Checkpoint(store.data_dir / CHECKPOINT_FILENAME)
 
     if not store.exists("companies.json"):
         display_error(
@@ -196,7 +205,7 @@ def discover_roles_cmd(
         require_api_key(config.model_provider)
 
     effective_refresh = refresh or config.refresh
-    if store.exists("roles.json") and not effective_refresh:
+    if store.exists("roles.json") and not effective_refresh and not resume:
         console.print("roles.json already exists. Use --refresh to re-fetch.")
         existing = store.read("roles.json")
         if existing:
@@ -207,49 +216,104 @@ def discover_roles_cmd(
     companies_data = store.read("companies.json")
     raw_companies = companies_data.get("companies", [])
 
-    # Filter to specific company if requested
-    if company:
-        raw_companies = [
-            c
-            for c in raw_companies
-            if company.lower() in c["name"].lower()
+    # ── Determine whether to resume or start fresh ────────────────────────────
+
+    if resume and cp.exists():
+        cp.load()
+        console.print(f"[yellow]Resuming:[/yellow] {cp.summary()}")
+        companies = [DiscoveredCompany.model_validate(c) for c in raw_companies]
+        roles = [DiscoveredRole.model_validate(r) for r in cp.raw_roles]
+        flagged_dicts = cp.flagged_companies
+        resume_filter_batches = cp.filter_batches_done
+        resume_filter_kept = [
+            DiscoveredRole.model_validate(r) for r in cp.filter_kept_roles
         ]
-        if not raw_companies:
-            display_error(f"No company matching '{company}' found in companies.json.")
-            raise SystemExit(1)
+        resume_score_batches = cp.score_batches_done
+    else:
+        if resume and not cp.exists():
+            console.print("[yellow]No checkpoint found — starting fresh.[/yellow]")
 
-    companies = [DiscoveredCompany.model_validate(c) for c in raw_companies]
-    console.print(f"Fetching roles from [bold]{len(companies)}[/bold] companies...\n")
+        # Filter to specific company if requested
+        if company:
+            raw_companies = [
+                c for c in raw_companies if company.lower() in c["name"].lower()
+            ]
+            if not raw_companies:
+                display_error(f"No company matching '{company}' found in companies.json.")
+                raise SystemExit(1)
 
-    roles, flagged = discover_roles(companies, config)
+        companies = [DiscoveredCompany.model_validate(c) for c in raw_companies]
+        console.print(f"Fetching roles from [bold]{len(companies)}[/bold] companies...\n")
 
-    # Apply LLM-based filters if configured
+        roles, flagged = discover_roles(companies, config)
+        flagged_dicts = [f.model_dump() for f in flagged]
+
+        # Save checkpoint after successful ATS fetch
+        cp.save_after_fetch(
+            raw_roles=roles,
+            flagged=flagged,
+            filter_config=config.role_filters.model_dump() if config.role_filters else None,
+            score_criteria=config.relevance_score_criteria,
+            filter_batch_size=100,
+            score_batch_size=60,
+        )
+
+        resume_filter_batches = 0
+        resume_filter_kept = []
+        resume_score_batches = 0
+
+    # ── Filter ────────────────────────────────────────────────────────────────
+
     filtered_roles = roles
     if config.role_filters and roles:
         from jobfinder.roles.filters import filter_roles
-        filtered_roles = filter_roles(roles, config.role_filters, config)
+        try:
+            filtered_roles = filter_roles(
+                roles, config.role_filters, config,
+                checkpoint=cp,
+                resume_batches=resume_filter_batches,
+                resume_kept=resume_filter_kept,
+            )
+        except RateLimitError as exc:
+            display_error(
+                f"Rate limit hit — {exc}\n"
+                f"Run [bold]jobfinder discover-roles --continue[/bold] to resume."
+            )
+            raise SystemExit(1)
         console.print(
             f"  [dim]{len(roles)} total → "
             f"[bold]{len(filtered_roles)}[/bold] after filtering[/dim]"
         )
 
-    # Apply LLM-based relevance scoring if configured
+    # ── Score ─────────────────────────────────────────────────────────────────
+
     scored_roles = filtered_roles
     if config.relevance_score_criteria and filtered_roles:
         from jobfinder.roles.scorer import score_roles
-        scored_roles = score_roles(filtered_roles, config.relevance_score_criteria, config)
+        try:
+            scored_roles = score_roles(
+                filtered_roles, config.relevance_score_criteria, config,
+                checkpoint=cp,
+                resume_batches=resume_score_batches,
+            )
+        except RateLimitError as exc:
+            display_error(
+                f"Rate limit hit — {exc}\n"
+                f"Run [bold]jobfinder discover-roles --continue[/bold] to resume."
+            )
+            raise SystemExit(1)
 
-    # Merge with existing roles if configured
+    # ── Merge with existing roles if configured ───────────────────────────────
+
     final_roles = scored_roles
     if config.write_preference == "merge" and store.exists("roles.json"):
-        from jobfinder.storage.schemas import DiscoveredRole
         existing_data = store.read("roles.json") or {}
         existing_roles = [
             DiscoveredRole.model_validate(r)
             for r in existing_data.get("roles", [])
         ]
         seen: dict[str, DiscoveredRole] = {r.url: r for r in existing_roles}
-        for r in scored_roles:  # new takes precedence
+        for r in scored_roles:
             seen[r.url] = r
         final_roles = sorted(seen.values(), key=lambda r: -(r.relevance_score or 0))
         console.print(f"  [dim]Merged → {len(final_roles)} total roles[/dim]")
@@ -258,15 +322,18 @@ def discover_roles_cmd(
         "fetched_at": datetime.now(timezone.utc).isoformat(),
         "total_roles": len(roles),
         "roles_after_filter": len(filtered_roles),
-        "companies_fetched": len(companies) - len(flagged),
-        "companies_flagged": len(flagged),
-        "flagged_companies": [f.model_dump() for f in flagged],
+        "companies_fetched": len(companies) - len(flagged_dicts),
+        "companies_flagged": len(flagged_dicts),
+        "flagged_companies": flagged_dicts,
         "roles": [r.model_dump() for r in final_roles],
     }
     store.write("roles.json", output)
 
+    # Clean up checkpoint — complete result is now in roles.json
+    cp.delete()
+
     console.print()
-    summary = f"Found {len(roles)} roles from {len(companies) - len(flagged)} companies"
+    summary = f"Found {len(roles)} roles from {len(companies) - len(flagged_dicts)} companies"
     if config.role_filters:
         summary += f", {len(filtered_roles)} matched filters"
     if config.relevance_score_criteria:
@@ -274,7 +341,7 @@ def discover_roles_cmd(
     display_success(summary + ".")
     if final_roles:
         display_roles(output["roles"])
-    display_flagged(output["flagged_companies"])
+    display_flagged(flagged_dicts)
 
 
 @cli.command("serve")

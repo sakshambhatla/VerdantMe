@@ -18,5 +18,6 @@ class RoleFiltersRequest(BaseModel):
 class DiscoverRolesRequest(BaseModel):
     company: str | None = None  # limit to one company
     refresh: bool = False
+    resume: bool = False  # resume from checkpoint if one exists
     role_filters: RoleFiltersRequest | None = None  # overrides config.role_filters
     relevance_score_criteria: str | None = None  # overrides config

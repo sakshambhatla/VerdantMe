@@ -4,6 +4,8 @@ import json
 import os
 
 from jobfinder.config import AppConfig
+from jobfinder.roles.checkpoint import Checkpoint
+from jobfinder.roles.errors import RateLimitError
 from jobfinder.storage.schemas import DiscoveredRole
 from jobfinder.utils.display import console
 
@@ -51,12 +53,15 @@ def _call_anthropic(prompt: str, config: AppConfig) -> str:
     import anthropic
 
     client = anthropic.Anthropic()
-    response = client.messages.create(
-        model=config.anthropic_model,
-        max_tokens=1024,
-        system=_SYSTEM_PROMPT,
-        messages=[{"role": "user", "content": prompt}],
-    )
+    try:
+        response = client.messages.create(
+            model=config.anthropic_model,
+            max_tokens=1024,
+            system=_SYSTEM_PROMPT,
+            messages=[{"role": "user", "content": prompt}],
+        )
+    except anthropic.RateLimitError as exc:
+        raise RateLimitError(str(exc)) from exc
     return response.content[0].text
 
 
@@ -66,13 +71,19 @@ def _call_gemini(prompt: str, config: AppConfig) -> str:
 
     from google import genai
     from google.genai import types
+    from google.genai.errors import ClientError
 
     client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY", ""))
-    response = client.models.generate_content(
-        model=config.gemini_model,
-        contents=prompt,
-        config=types.GenerateContentConfig(system_instruction=_SYSTEM_PROMPT),
-    )
+    try:
+        response = client.models.generate_content(
+            model=config.gemini_model,
+            contents=prompt,
+            config=types.GenerateContentConfig(system_instruction=_SYSTEM_PROMPT),
+        )
+    except ClientError as exc:
+        if exc.status_code == 429:
+            raise RateLimitError(str(exc)) from exc
+        raise
     return response.text
 
 
@@ -107,24 +118,56 @@ def score_roles(
     roles: list[DiscoveredRole],
     criteria: str,
     config: AppConfig,
+    *,
+    checkpoint: Checkpoint | None = None,
+    resume_batches: int = 0,
 ) -> list[DiscoveredRole]:
-    """Score each role 1–10 and generate a summary, then sort highest-first."""
-    console.print(f"\nScoring [bold]{len(roles)}[/bold] roles for relevance...")
+    """Score each role 1–10 and generate a summary, then sort highest-first.
 
-    for batch_start in range(0, len(roles), BATCH_SIZE):
+    Args:
+        roles: Roles to score (typically already filtered).
+        criteria: Free-text description of what makes a role relevant.
+        config: App configuration (model provider, etc.).
+        checkpoint: If set, saves progress after each batch so the run can be resumed.
+        resume_batches: Number of already-scored batches to skip (used when resuming).
+    """
+    total_batches = (len(roles) + BATCH_SIZE - 1) // BATCH_SIZE
+
+    if resume_batches > 0:
+        console.print(
+            f"\nResuming scoring from batch {resume_batches + 1}/{total_batches}..."
+        )
+    else:
+        console.print(f"\nScoring [bold]{len(roles)}[/bold] roles for relevance...")
+
+    start_offset = resume_batches * BATCH_SIZE
+
+    for batch_start in range(start_offset, len(roles), BATCH_SIZE):
         batch = roles[batch_start : batch_start + BATCH_SIZE]
         batch_num = batch_start // BATCH_SIZE + 1
-        total_batches = (len(roles) + BATCH_SIZE - 1) // BATCH_SIZE
 
         with console.status(
             f"  Scoring batch {batch_num}/{total_batches} ({len(batch)} roles)..."
         ):
             prompt = _build_prompt(batch, criteria)
-            scores = _call_llm(prompt, config)
+            try:
+                scores = _call_llm(prompt, config)
+            except RateLimitError as exc:
+                # Checkpoint with whatever has been scored so far before propagating
+                if checkpoint:
+                    checkpoint.save_score_batch(batch_num - 1, roles, total_batches)
+                raise RateLimitError(
+                    f"Rate limit hit at scoring batch {batch_num}/{total_batches}. "
+                    f"Progress saved — use 'Continue from previous run' to resume."
+                ) from exc
 
         for i, role in enumerate(batch):
             if i in scores:
                 role.relevance_score = scores[i]["score"]
                 role.summary = scores[i].get("summary")
+
+        # Save progress after each successful batch
+        if checkpoint:
+            checkpoint.save_score_batch(batch_num, roles, total_batches)
 
     return sorted(roles, key=lambda r: -(r.relevance_score or 0))
