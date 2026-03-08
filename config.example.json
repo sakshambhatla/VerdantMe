@@ -1,0 +1,16 @@
+{
+  "resume_dir": "./resumes",
+  "data_dir": "./data",
+  "model_provider": "gemini",
+  "anthropic_model": "claude-sonnet-4-6",
+  "gemini_model": "gemini-2.5-flash",
+  "max_companies": 20,
+  "refresh": false,
+  "request_timeout": 30,
+  "role_filters": {
+    "title": "Engineering Manager",
+    "posted_after": "Jan 1, 2026",
+    "location": "SF, Seattle, NY or Remote",
+    "confidence": "high"
+  }
+}

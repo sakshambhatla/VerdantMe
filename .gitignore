@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+dist/
+build/
+
+# Runtime data (generated output)
+data/
+
+# Personal resume files
+resumes/
+
+# Personal config (copy config.example.json → config.json and customise)
+config.json
+
+# Secrets
+.env
+*.env
+
+# macOS
+.DS_Store
+
+# Editor
+.idea/
+.vscode/
+*.swp
