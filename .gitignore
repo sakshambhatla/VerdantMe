@@ -26,3 +26,7 @@ config.json
 .idea/
 .vscode/
 *.swp
+
+# Frontend
+ui/node_modules/
+ui/dist/

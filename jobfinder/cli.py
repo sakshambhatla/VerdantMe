@@ -277,5 +277,19 @@ def discover_roles_cmd(
     display_flagged(output["flagged_companies"])
 
 
+@cli.command("serve")
+@click.option("--host", default="127.0.0.1", show_default=True, help="Host to bind to")
+@click.option("--port", default=8000, show_default=True, type=int, help="Port to listen on")
+@click.option("--reload", is_flag=True, default=False, help="Enable auto-reload (development)")
+def serve_cmd(host: str, port: int, reload: bool) -> None:
+    """Launch the JobFinder web UI server."""
+    import uvicorn
+
+    console.print(
+        f"Starting JobFinder UI at [bold cyan]http://{host}:{port}[/bold cyan]"
+    )
+    uvicorn.run("jobfinder.api.main:app", host=host, port=port, reload=reload)
+
+
 if __name__ == "__main__":
     cli()

@@ -1,9 +1,10 @@
 # JobFinder — Claude Context
 
 ## Stack
-- Python 3.12 · Click · Pydantic v2 · httpx · Rich · Anthropic SDK · google-genai
+- Python 3.12 · FastAPI · uvicorn · Click · Pydantic v2 · httpx · Rich · Anthropic SDK · google-genai
+- React 18 · TypeScript · Vite · Tailwind CSS v4 · shadcn/ui · TanStack Query · TanStack Table · axios
 - Installed as editable package in `.venv`: `source .venv/bin/activate && pip install -e .`
-- Entry point: `jobfinder/cli.py` → `cli` Click group
+- Entry points: `jobfinder/cli.py` → `cli` Click group; `jobfinder/api/main.py` → FastAPI app
 
 ## Commands
 | Command | Output file | Key flag |
@@ -11,12 +12,20 @@
 | `jobfinder resume` | `data/resumes.json` | `--resume-dir` |
 | `jobfinder discover-companies` | `data/companies.json` | `--max-companies`, `--refresh` |
 | `jobfinder discover-roles` | `data/roles.json` | `--company`, `--refresh` |
+| `jobfinder serve` | (starts server) | `--host`, `--port`, `--reload` |
 
 ## File Map
 ```
 jobfinder/
-  cli.py            # Click group — 3 subcommands, wires everything together
+  cli.py            # Click group — 4 subcommands (resume, discover-companies, discover-roles, serve)
   config.py         # AppConfig (Pydantic), load_config(), require_api_key(provider)
+  api/
+    main.py         # FastAPI app — CORS, mounts routes, serves ui/dist in production
+    models.py       # API-specific request models (DiscoverCompaniesRequest, DiscoverRolesRequest)
+    routes/
+      resume.py     # POST /api/resume/upload, GET /api/resume
+      companies.py  # POST /api/companies/discover, GET /api/companies
+      roles.py      # POST /api/roles/discover, GET /api/roles
   resume/
     parser.py       # Regex section/skill/title extraction from .txt files
   companies/
@@ -24,8 +33,8 @@ jobfinder/
     discovery.py    # discover_companies() → _call_anthropic() / _call_gemini() → _parse_response()
   roles/
     discovery.py    # discover_roles() — iterates companies, accumulates roles + flagged
-    filters.py      # filter_roles() — LLM-based title/date/location filter, batched 50/call
-    scorer.py       # score_roles() — LLM assigns 1-10 relevance score, batched 30/call, returns sorted
+    filters.py      # filter_roles() — LLM-based title/date/location filter, batched 100/call
+    scorer.py       # score_roles() — LLM assigns 1-10 score + summary, batched 60/call, returns sorted
     ats/
       __init__.py   # ATS_REGISTRY dict: ats_type str → fetcher instance
       base.py       # BaseFetcher ABC, ATSFetchError, UnsupportedATSError
@@ -40,6 +49,19 @@ jobfinder/
     http.py         # get_json(url, timeout) with manual retry
     display.py      # Rich console helpers: display_companies/roles/flagged/error/success
     throttle.py     # Shared sliding-window RateLimiter; get_limiter(rpm) returns process-level instance
+ui/
+  src/
+    App.tsx         # Three-tab layout (shadcn/ui Tabs)
+    main.tsx        # React root + QueryClientProvider
+    lib/
+      api.ts        # axios API client + TypeScript types for all endpoints
+      queryClient.ts# TanStack Query client config
+    components/
+      ResumeTab.tsx      # Drag-and-drop upload, parsed resume card
+      CompaniesTab.tsx   # Config form, company table
+      RolesTab.tsx       # Filter form, sortable TanStack Table, flagged callout
+      ui/                # shadcn/ui components (button, card, tabs, badge, input, label)
+  vite.config.ts    # /api proxy → :8000; @ alias → src/
 ```
 
 ## Config (`config.json`)
@@ -69,3 +91,7 @@ API keys come from env only: `ANTHROPIC_API_KEY` or `GEMINI_API_KEY`.
 - **Schemas**: all JSON shapes are Pydantic models in `storage/schemas.py`; update there first when changing data structures
 - **Refresh logic**: `effective_refresh = refresh or config.refresh` — either CLI flag or config triggers re-run
 - **Graceful degradation**: one company's ATS failure → added to `flagged` list, not a crash; displayed at end
+- **API wraps CLI**: all `api/routes/*.py` call the same core functions as `cli.py`; blocking calls run via `asyncio.to_thread()` to keep FastAPI event loop free
+- **UI dev**: Vite (`pnpm dev`) proxies `/api` → FastAPI on :8000; production build (`pnpm build`) goes to `ui/dist/` which FastAPI serves as static files
+- **Adding an API route**: create handler in `api/routes/<name>.py`, add request model to `api/models.py`, mount router in `api/main.py`
+- **Adding a UI tab**: create component in `ui/src/components/<Name>Tab.tsx`, add tab trigger/content in `App.tsx`, add API calls to `lib/api.ts`

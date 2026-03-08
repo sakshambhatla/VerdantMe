@@ -41,7 +41,41 @@ echo 'export ANTHROPIC_API_KEY=sk-ant-...' >> ~/.zshrc
 echo 'export GEMINI_API_KEY=...' >> ~/.zshrc
 ```
 
-## Usage
+## Web UI
+
+The easiest way to use JobFinder is through the browser UI:
+
+```bash
+# Start the server (Python + pre-built UI)
+jobfinder serve
+
+# Then open: http://localhost:8000
+```
+
+Three tabs let you upload a resume, discover companies, and discover/filter roles — all without touching the terminal again.
+
+### UI Development
+
+If you want to modify the frontend:
+
+```bash
+# Terminal 1 — Python API server
+jobfinder serve --reload
+
+# Terminal 2 — Vite dev server (hot reload)
+cd ui
+node --version  # needs Node 20+; run: nvm use 20
+pnpm install    # first time only
+pnpm dev        # opens http://localhost:5173 (proxies /api → :8000)
+```
+
+Build for production (output goes to `ui/dist/`, served automatically by `jobfinder serve`):
+
+```bash
+cd ui && pnpm build
+```
+
+## CLI Usage
 
 Run the three commands in order:
 
