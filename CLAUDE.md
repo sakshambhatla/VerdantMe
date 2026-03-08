@@ -39,6 +39,7 @@ jobfinder/
   utils/
     http.py         # get_json(url, timeout) with manual retry
     display.py      # Rich console helpers: display_companies/roles/flagged/error/success
+    throttle.py     # Shared sliding-window RateLimiter; get_limiter(rpm) returns process-level instance
 ```
 
 ## Config (`config.json`)
@@ -58,6 +59,7 @@ role_filters.location string | null                    — location filter (natu
 role_filters.confidence  "high" | "medium" | "low"    — LLM match threshold (default "high")
 relevance_score_criteria  string | null                — keywords/description; LLM scores roles 1-10, sorted highest-first
 write_preference      "overwrite" | "merge"            — overwrite replaces file; merge deduplicates + re-sorts (default "overwrite")
+rpm_limit             int                              — max LLM RPM (client-side); 0 = disabled; default 4 (Gemini free tier)
 ```
 API keys come from env only: `ANTHROPIC_API_KEY` or `GEMINI_API_KEY`.
 

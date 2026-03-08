@@ -141,6 +141,7 @@ Set any `role_filters` field to `null` (or omit it) to skip that filter. Omit `r
 | `role_filters.confidence` | `"high"` | Match threshold: `"high"`, `"medium"`, or `"low"` |
 | `relevance_score_criteria` | `null` | Keywords/description for scoring roles 1–10 (e.g. `"spark, flink, data pipelines"`); roles sorted highest-first in output |
 | `write_preference` | `"overwrite"` | `"overwrite"` replaces existing output; `"merge"` combines with existing data, deduplicates, and re-sorts |
+| `rpm_limit` | `4` | Max LLM requests per minute (client-side throttle). Set to `0` to disable. Default is `4` — safe for Gemini free tier (5 RPM max). |
 
 CLI flags override config file values (e.g. `--max-companies 25` overrides `max_companies`).
 

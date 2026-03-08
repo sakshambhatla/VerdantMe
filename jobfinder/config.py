@@ -35,6 +35,8 @@ class AppConfig(BaseModel):
     relevance_score_criteria: str | None = None
     # "overwrite": replace existing output file; "merge": combine with existing, sort by score
     write_preference: str = "overwrite"
+    # Max LLM requests per minute (client-side throttle). Set to 0 to disable.
+    rpm_limit: int = 4
 
 
 def load_config(config_path: str | None = None, **overrides: object) -> AppConfig:

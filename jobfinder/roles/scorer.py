@@ -44,6 +44,9 @@ def _build_prompt(roles: list[DiscoveredRole], criteria: str) -> str:
 
 
 def _call_anthropic(prompt: str, config: AppConfig) -> str:
+    from jobfinder.utils.throttle import get_limiter
+    get_limiter(config.rpm_limit).wait()
+
     import anthropic
 
     client = anthropic.Anthropic()
@@ -57,6 +60,9 @@ def _call_anthropic(prompt: str, config: AppConfig) -> str:
 
 
 def _call_gemini(prompt: str, config: AppConfig) -> str:
+    from jobfinder.utils.throttle import get_limiter
+    get_limiter(config.rpm_limit).wait()
+
     from google import genai
     from google.genai import types
 

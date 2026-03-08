@@ -14,5 +14,6 @@
     "confidence": "high"
   },
   "relevance_score_criteria": "big data, data pipelines, spark, flink, distributed systems, platform engineering",
-  "write_preference": "overwrite"
+  "write_preference": "overwrite",
+  "rpm_limit": 4
 }
