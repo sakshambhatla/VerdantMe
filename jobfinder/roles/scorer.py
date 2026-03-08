@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 
 from jobfinder.config import AppConfig
 from jobfinder.roles.checkpoint import Checkpoint
@@ -65,7 +66,7 @@ def _call_anthropic(prompt: str, config: AppConfig) -> str:
     return response.content[0].text
 
 
-def _call_gemini(prompt: str, config: AppConfig) -> str:
+def _call_gemini(prompt: str, config: AppConfig, *, _attempt: int = 0) -> str:
     from jobfinder.utils.throttle import get_limiter
     get_limiter(config.rpm_limit).wait()
 
@@ -82,7 +83,30 @@ def _call_gemini(prompt: str, config: AppConfig) -> str:
         )
     except ClientError as exc:
         if getattr(exc, "code", None) == 429:
-            raise RateLimitError(str(exc)) from exc
+            detail = str(exc)
+            console.print(f"[yellow]  Gemini 429 detail: {detail}[/yellow]")
+
+            is_per_minute = any(
+                kw in detail.lower()
+                for kw in ("per_minute", "per minute", "perminute", "requests_per_minute")
+            )
+            if is_per_minute and _attempt < 3:
+                wait = 65
+                console.print(
+                    f"[yellow]  RPM limit — waiting {wait}s, retry {_attempt + 1}/3...[/yellow]"
+                )
+                time.sleep(wait)
+                return _call_gemini(prompt, config, _attempt=_attempt + 1)
+
+            quota_type = (
+                "per-minute limit (retries exhausted)" if is_per_minute else "daily quota"
+            )
+            raise RateLimitError(
+                f"Gemini {quota_type} exceeded.\n"
+                f"Detail: {detail}\n"
+                f"Tip: try 'gemini-2.0-flash' in config.json (higher free-tier RPD) "
+                f"or switch to model_provider='anthropic'."
+            ) from exc
         raise
     return response.text
 
