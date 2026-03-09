@@ -93,6 +93,7 @@ export interface CompanyRegistryEntry {
   ats_type: string;
   ats_board_token: string | null;
   career_page_url: string;
+  searchable: boolean | null;  // null=untested; true=LLM found jobs; false=failed
 }
 
 export async function getCompanyRegistry(): Promise<CompanyRegistryEntry[]> {

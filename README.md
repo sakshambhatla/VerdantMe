@@ -188,7 +188,8 @@ All output is written to `data/`:
 |------|----------|
 | `data/resumes.json` | Parsed resume data (skills, titles, sections) |
 | `data/companies.json` | LLM's company suggestions with ATS metadata (last run) |
-| `data/company_registry.json` | Perpetual registry of all companies ever discovered; grows with every Discover Companies run; used by `--company` and the "Select from Registry" UI panel |
+| `data/company_registry.json` | Perpetual registry of all companies ever discovered; grows with every Discover Companies run; includes `searchable` field updated after career page fetch attempts; used by `--company` and the "Select from Registry" UI panel |
+| `data/company_registry_archive.json` | Previous registry snapshot (archived before first clean run) |
 | `data/roles.json` | Fetched roles + companies flagged for manual check |
 
 ## ATS Support
@@ -200,11 +201,13 @@ Role discovery uses public APIs — no authentication required:
 | Greenhouse | Fully supported |
 | Lever | Fully supported |
 | Ashby | Fully supported |
+| Career Page (LLM) | Attempted for every company with a `career_page_url`; LLM parses raw HTML to extract job listings; results merged with ATS roles (deduplicated by URL); outcome recorded in `searchable` field of the registry |
 | Workday | Flagged for manual check |
 | LinkedIn | Flagged for manual check |
 
 Companies using unsupported ATS types are surfaced with their career page URL
-so you can check them manually.
+so you can check them manually. Career page scraping may also surface roles for
+these companies if their page is server-rendered.
 
 ### Planned ATS support
 

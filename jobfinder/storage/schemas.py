@@ -62,3 +62,4 @@ class CompanyRegistryEntry(BaseModel):
     ats_type: str = "unknown"
     ats_board_token: str | None = None
     career_page_url: str = ""
+    searchable: bool | None = None  # None=untested; True=LLM found jobs; False=failed

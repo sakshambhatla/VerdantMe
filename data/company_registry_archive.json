@@ -1,0 +1,251 @@
+{
+  "updated_at": "2026-03-09T05:59:28.629330+00:00",
+  "companies": [
+    {
+      "name": "Netflix",
+      "ats_type": "greenhouse",
+      "ats_board_token": "netflix",
+      "career_page_url": "https://jobs.netflix.com/teams/engineering"
+    },
+    {
+      "name": "Uber",
+      "ats_type": "greenhouse",
+      "ats_board_token": "uber",
+      "career_page_url": "https://www.uber.com/us/en/careers/list/"
+    },
+    {
+      "name": "Airbnb",
+      "ats_type": "greenhouse",
+      "ats_board_token": "airbnb",
+      "career_page_url": "https://careers.airbnb.com/positions"
+    },
+    {
+      "name": "Spotify",
+      "ats_type": "greenhouse",
+      "ats_board_token": "spotify",
+      "career_page_url": "https://www.spotify.com/us/careers/jobs/"
+    },
+    {
+      "name": "Stripe",
+      "ats_type": "greenhouse",
+      "ats_board_token": "stripe",
+      "career_page_url": "https://stripe.com/jobs"
+    },
+    {
+      "name": "Databricks",
+      "ats_type": "lever",
+      "ats_board_token": "databricks",
+      "career_page_url": "https://www.databricks.com/company/careers/job-openings"
+    },
+    {
+      "name": "Snowflake",
+      "ats_type": "greenhouse",
+      "ats_board_token": "snowflakeinc",
+      "career_page_url": "https://www.snowflake.com/en/careers/job-openings/"
+    },
+    {
+      "name": "Shopify",
+      "ats_type": "greenhouse",
+      "ats_board_token": "shopify",
+      "career_page_url": "https://www.shopify.com/careers/search"
+    },
+    {
+      "name": "The Trade Desk",
+      "ats_type": "lever",
+      "ats_board_token": "thetradedesk",
+      "career_page_url": "https://www.thetradedesk.com/us/careers/open-positions"
+    },
+    {
+      "name": "Wayfair",
+      "ats_type": "greenhouse",
+      "ats_board_token": "wayfair",
+      "career_page_url": "https://www.wayfair.com/careers/jobs"
+    },
+    {
+      "name": "DoorDash",
+      "ats_type": "greenhouse",
+      "ats_board_token": "doordash",
+      "career_page_url": "https://www.doordash.com/careers/jobs/"
+    },
+    {
+      "name": "Pinterest",
+      "ats_type": "greenhouse",
+      "ats_board_token": "pinterest",
+      "career_page_url": "https://pinterestcareers.com/en/roles/"
+    },
+    {
+      "name": "Snap Inc.",
+      "ats_type": "lever",
+      "ats_board_token": "snap",
+      "career_page_url": "https://www.snap.com/en-US/careers/jobs"
+    },
+    {
+      "name": "Instacart",
+      "ats_type": "greenhouse",
+      "ats_board_token": "instacart",
+      "career_page_url": "https://www.instacart.com/company/careers/job-openings"
+    },
+    {
+      "name": "Cruise",
+      "ats_type": "lever",
+      "ats_board_token": "cruise",
+      "career_page_url": "https://www.getcruise.com/careers/jobs/"
+    },
+    {
+      "name": "Chime",
+      "ats_type": "lever",
+      "ats_board_token": "chime",
+      "career_page_url": "https://www.chime.com/careers/jobs/"
+    },
+    {
+      "name": "Duolingo",
+      "ats_type": "lever",
+      "ats_board_token": "duolingo",
+      "career_page_url": "https://www.duolingo.com/careers/all-jobs"
+    },
+    {
+      "name": "Roblox",
+      "ats_type": "greenhouse",
+      "ats_board_token": "roblox",
+      "career_page_url": "https://www.roblox.com/careers/positions"
+    },
+    {
+      "name": "Coinbase",
+      "ats_type": "lever",
+      "ats_board_token": "coinbase",
+      "career_page_url": "https://www.coinbase.com/careers/positions"
+    },
+    {
+      "name": "Datadog",
+      "ats_type": "greenhouse",
+      "ats_board_token": "datadog",
+      "career_page_url": "https://www.datadoghq.com/careers/open-positions/"
+    },
+    {
+      "name": "Roku",
+      "ats_type": "lever",
+      "ats_board_token": "roku",
+      "career_page_url": "https://www.roku.com/careers/jobs"
+    },
+    {
+      "name": "Twitch",
+      "ats_type": "lever",
+      "ats_board_token": "twitch",
+      "career_page_url": "https://www.twitch.tv/jobs"
+    },
+    {
+      "name": "Plaid",
+      "ats_type": "lever",
+      "ats_board_token": "plaid",
+      "career_page_url": "https://plaid.com/careers/open-roles"
+    },
+    {
+      "name": "Asana",
+      "ats_type": "greenhouse",
+      "ats_board_token": "asana",
+      "career_page_url": "https://asana.com/careers/jobs"
+    },
+    {
+      "name": "Grubhub",
+      "ats_type": "greenhouse",
+      "ats_board_token": "grubhub",
+      "career_page_url": "https://careers.grubhub.com/job-listings/"
+    },
+    {
+      "name": "Tripadvisor",
+      "ats_type": "greenhouse",
+      "ats_board_token": "tripadvisor",
+      "career_page_url": "https://www.tripadvisor.com/careers/current-openings/engineering/"
+    },
+    {
+      "name": "Hopper",
+      "ats_type": "lever",
+      "ats_board_token": "hopper",
+      "career_page_url": "https://www.hopper.com/careers/current-openings"
+    },
+    {
+      "name": "Block (Square)",
+      "ats_type": "lever",
+      "ats_board_token": "square",
+      "career_page_url": "https://block.xyz/careers"
+    },
+    {
+      "name": "Zillow",
+      "ats_type": "greenhouse",
+      "ats_board_token": "zillow",
+      "career_page_url": "https://www.zillow.com/careers/jobs/"
+    },
+    {
+      "name": "Unity Technologies",
+      "ats_type": "greenhouse",
+      "ats_board_token": "unity",
+      "career_page_url": "https://unity.com/careers/jobs"
+    },
+    {
+      "name": "Palantir",
+      "ats_type": "greenhouse",
+      "ats_board_token": "palantirtech",
+      "career_page_url": "https://www.palantir.com/careers/jobs"
+    },
+    {
+      "name": "Canva",
+      "ats_type": "ashby",
+      "ats_board_token": "canva",
+      "career_page_url": "https://www.canva.com/careers/open-positions/"
+    },
+    {
+      "name": "Rubrik",
+      "ats_type": "greenhouse",
+      "ats_board_token": "rubrik",
+      "career_page_url": "https://www.rubrik.com/company/careers/jobs"
+    },
+    {
+      "name": "Cockroach Labs",
+      "ats_type": "lever",
+      "ats_board_token": "cockroachlabs",
+      "career_page_url": "https://www.cockroachlabs.com/careers/"
+    },
+    {
+      "name": "Confluent",
+      "ats_type": "lever",
+      "ats_board_token": "confluent",
+      "career_page_url": "https://www.confluent.io/careers/open-positions/"
+    },
+    {
+      "name": "HashiCorp",
+      "ats_type": "greenhouse",
+      "ats_board_token": "hashicorp",
+      "career_page_url": "https://www.hashicorp.com/jobs"
+    },
+    {
+      "name": "Brex",
+      "ats_type": "lever",
+      "ats_board_token": "brex",
+      "career_page_url": "https://www.brex.com/careers/open-positions"
+    },
+    {
+      "name": "Scale AI",
+      "ats_type": "greenhouse",
+      "ats_board_token": "scaleai",
+      "career_page_url": "https://scale.com/careers/open-roles"
+    },
+    {
+      "name": "Airtable",
+      "ats_type": "greenhouse",
+      "ats_board_token": "airtable",
+      "career_page_url": "https://www.airtable.com/careers/jobs"
+    },
+    {
+      "name": "Google",
+      "ats_type": "workday",
+      "ats_board_token": null,
+      "career_page_url": "https://careers.google.com/jobs/"
+    },
+    {
+      "name": "Meta",
+      "ats_type": "workday",
+      "ats_board_token": null,
+      "career_page_url": "https://careers.meta.com/jobs/"
+    }
+  ]
+}
