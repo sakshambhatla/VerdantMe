@@ -305,6 +305,7 @@ export function RolesTab() {
   const [locationFilter, setLocationFilter] = useState("");
   const [postedAfter, setPostedAfter] = useState("");
   const [scoringCriteria, setScoringCriteria] = useState("");
+  const [useCache, setUseCache] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const { data: cached } = useQuery({
@@ -337,6 +338,7 @@ export function RolesTab() {
       return discoverRoles({
         resume,
         refresh: true,
+        use_cache: useCache,
         company_names: sourceMode === "registry" ? selectedNames : undefined,
         role_filters: hasFilters
           ? {
@@ -445,7 +447,7 @@ export function RolesTab() {
               />
             </div>
           </div>
-          <div className="mt-4 flex items-center gap-3">
+          <div className="mt-4 flex flex-wrap items-center gap-4">
             <Button
               onClick={() => discover.mutate(false)}
               disabled={discover.isPending || !canDiscover}
@@ -459,6 +461,15 @@ export function RolesTab() {
                 "Discover Roles"
               )}
             </Button>
+            <label className="flex items-center gap-2 text-sm text-white/55 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={useCache}
+                onChange={(e) => setUseCache(e.target.checked)}
+                className="accent-white/70"
+              />
+              Use cached results <span className="text-xs text-white/35">(TTL: 2 days)</span>
+            </label>
             {sourceMode === "registry" && selectedNames.length > 0 && (
               <span className="text-xs text-white/40">
                 {selectedNames.length} {selectedNames.length === 1 ? "company" : "companies"} selected

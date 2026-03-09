@@ -4,6 +4,7 @@ from jobfinder.config import AppConfig
 from jobfinder.roles.ats import get_fetcher
 from jobfinder.roles.ats.base import ATSFetchError, UnsupportedATSError
 from jobfinder.roles.ats.career_page import fetch_career_page_roles
+from jobfinder.roles.cache import RolesCache
 from jobfinder.storage.registry import update_registry_searchable
 from jobfinder.storage.schemas import DiscoveredCompany, DiscoveredRole, FlaggedCompany
 from jobfinder.storage.store import StorageManager
@@ -13,24 +14,46 @@ from jobfinder.utils.display import console, display_warning
 def discover_roles(
     companies: list[DiscoveredCompany],
     config: AppConfig,
+    use_cache: bool = False,
 ) -> tuple[list[DiscoveredRole], list[FlaggedCompany]]:
     """Fetch roles from all companies. Returns (roles, flagged_companies).
 
     Two-pass approach:
       1. ATS APIs (Greenhouse/Lever/Ashby) — structured, fast
       2. Career page HTML parsed by LLM — supplements ATS results, deduplicated by URL
+
+    When ``use_cache=True``, each company+ATS pair is checked in the local
+    roles cache before making any network request.  Cache entries older than
+    2 days are treated as misses.  A fresh cache entry is always written after
+    every successful network fetch.
     """
     all_roles: list[DiscoveredRole] = []
     flagged: list[FlaggedCompany] = []
 
+    store = StorageManager(config.data_dir)
+    cache = RolesCache(store)
+
     # ── Pass 1: ATS API fetch ────────────────────────────────────────────────
     for company in companies:
+        # Cache check
+        if use_cache:
+            cached = cache.get(company.name, company.ats_type)
+            if cached is not None:
+                all_roles.extend(cached)
+                age = cache.age_hours(company.name, company.ats_type) or 0
+                console.print(
+                    f"  [dim]{company.name}[/dim]: "
+                    f"{len(cached)} roles (cached {age:.0f}h ago)"
+                )
+                continue
+
         fetcher = get_fetcher(company.ats_type)
 
         with console.status(f"Fetching roles from {company.name}..."):
             try:
                 roles = fetcher.fetch(company, config.request_timeout)
                 all_roles.extend(roles)
+                cache.put(company.name, company.ats_type, roles)
                 console.print(
                     f"  [green]{company.name}[/green]: {len(roles)} roles found"
                 )
@@ -68,12 +91,27 @@ def discover_roles(
                 display_warning(f"{company.name}: Unexpected error — {exc}")
 
     # ── Pass 2: career page supplemental fetch ───────────────────────────────
-    store = StorageManager(config.data_dir)
     existing_urls: set[str] = {r.url for r in all_roles if r.url}
 
     for company in companies:
         if not company.career_page_url:
             continue
+
+        # Cache check for career page
+        if use_cache:
+            cached_cp = cache.get(company.name, "career_page")
+            if cached_cp is not None:
+                new_roles = [r for r in cached_cp if not r.url or r.url not in existing_urls]
+                if new_roles:
+                    all_roles.extend(new_roles)
+                    existing_urls.update(r.url for r in new_roles if r.url)
+                age = cache.age_hours(company.name, "career_page") or 0
+                console.print(
+                    f"  [dim]{company.name} (career_page)[/dim]: "
+                    f"{len(cached_cp)} roles (cached {age:.0f}h ago)"
+                )
+                update_registry_searchable(store, company.name, bool(cached_cp))
+                continue
 
         with console.status(f"Checking career page for {company.name}..."):
             searchable: bool
@@ -91,6 +129,7 @@ def discover_roles(
                         f"  [green]{company.name}[/green]: "
                         f"{len(new_roles)} additional roles via career page"
                     )
+                cache.put(company.name, "career_page", cp_roles)
                 searchable = bool(cp_roles)
             except Exception as exc:
                 display_warning(f"{company.name}: career page fetch failed — {exc}")

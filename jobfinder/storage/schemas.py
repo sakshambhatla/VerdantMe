@@ -63,3 +63,10 @@ class CompanyRegistryEntry(BaseModel):
     ats_board_token: str | None = None
     career_page_url: str = ""
     searchable: bool | None = None  # None=untested; True=LLM found jobs; False=failed
+
+
+class RolesCacheEntry(BaseModel):
+    company_name: str
+    ats_type: str           # e.g. "greenhouse", "career_page"
+    cached_at: str          # ISO timestamp (UTC)
+    roles: list[DiscoveredRole]

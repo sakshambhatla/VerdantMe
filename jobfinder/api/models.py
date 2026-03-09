@@ -19,5 +19,6 @@ class DiscoverRolesRequest(BaseModel):
     company_names: list[str] | None = None  # limit to specific companies from registry
     refresh: bool = False
     resume: bool = False  # resume from checkpoint if one exists
+    use_cache: bool = False  # re-use cached roles (TTL: 2 days) per company+ATS
     role_filters: RoleFiltersRequest | None = None  # overrides config.role_filters
     relevance_score_criteria: str | None = None  # overrides config

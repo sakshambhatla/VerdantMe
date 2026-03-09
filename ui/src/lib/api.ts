@@ -114,6 +114,7 @@ export interface DiscoverRolesParams {
   company_names?: string[];
   refresh?: boolean;
   resume?: boolean;
+  use_cache?: boolean;
   role_filters?: RoleFiltersParams;
   relevance_score_criteria?: string;
 }

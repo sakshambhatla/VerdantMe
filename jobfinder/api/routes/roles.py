@@ -92,8 +92,12 @@ async def discover_roles_endpoint(req: DiscoverRolesRequest, request: Request) -
 
         companies = [DiscoveredCompany.model_validate(c) for c in raw_companies]
 
+        # --refresh overrides --use-cache: a fresh fetch always wins
+        effective_use_cache = req.use_cache and not req.refresh
         try:
-            roles, flagged = await asyncio.to_thread(discover_roles, companies, config)
+            roles, flagged = await asyncio.to_thread(
+                discover_roles, companies, config, effective_use_cache
+            )
         except Exception as exc:
             raise HTTPException(
                 status_code=500, detail=f"Role discovery failed: {exc}"

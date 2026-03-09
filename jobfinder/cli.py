@@ -185,9 +185,19 @@ def discover_companies(
     default=False,
     help="Resume from a previous run that was interrupted by a rate-limit error",
 )
+@click.option(
+    "--use-cache",
+    is_flag=True,
+    default=False,
+    help="Re-use cached roles (TTL: 2 days) per company+ATS instead of re-fetching",
+)
 @click.pass_context
 def discover_roles_cmd(
-    ctx: click.Context, company_names: tuple[str, ...], refresh: bool, resume: bool
+    ctx: click.Context,
+    company_names: tuple[str, ...],
+    refresh: bool,
+    resume: bool,
+    use_cache: bool,
 ) -> None:
     """Read open roles from discovered companies' career pages via public ATS APIs."""
     from jobfinder.roles.checkpoint import CHECKPOINT_FILENAME, Checkpoint
@@ -268,7 +278,9 @@ def discover_roles_cmd(
             companies = [DiscoveredCompany.model_validate(c) for c in raw_companies]
         console.print(f"Fetching roles from [bold]{len(companies)}[/bold] companies...\n")
 
-        roles, flagged = discover_roles(companies, config)
+        # --refresh overrides --use-cache: a fresh fetch always wins
+        effective_use_cache = use_cache and not (refresh or config.refresh)
+        roles, flagged = discover_roles(companies, config, use_cache=effective_use_cache)
         flagged_dicts = [f.model_dump() for f in flagged]
 
         # Save checkpoint after successful ATS fetch
