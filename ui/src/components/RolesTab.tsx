@@ -300,7 +300,8 @@ export function RolesTab() {
   const [selectedNames, setSelectedNames] = useState<string[]>([]);
   const [registrySearch, setRegistrySearch] = useState("");
 
-  // Filter / scoring state
+  // Filter / scoring / provider state
+  const [provider, setProvider] = useState<string>("gemini");
   const [titleFilter, setTitleFilter] = useState("");
   const [locationFilter, setLocationFilter] = useState("");
   const [postedAfter, setPostedAfter] = useState("");
@@ -349,6 +350,7 @@ export function RolesTab() {
             }
           : undefined,
         relevance_score_criteria: scoringCriteria || undefined,
+        model_provider: provider || undefined,
       });
     },
     onSuccess: (data) => {
@@ -445,6 +447,24 @@ export function RolesTab() {
                 value={scoringCriteria}
                 onChange={(e) => setScoringCriteria(e.target.value)}
               />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="roles-provider" className="text-white/75">LLM Provider</Label>
+              <select
+                id="roles-provider"
+                value={provider}
+                onChange={(e) => setProvider(e.target.value)}
+                className="flex h-8 w-36 rounded-lg px-3 py-1 text-sm text-white transition-colors outline-none focus-visible:ring-3 focus-visible:ring-white/20 focus-visible:border-white/40"
+                style={{
+                  background: "rgba(255,255,255,0.10)",
+                  backdropFilter: "blur(4px)",
+                  WebkitBackdropFilter: "blur(4px)",
+                  border: "1px solid rgba(255,255,255,0.20)",
+                }}
+              >
+                <option value="gemini" style={{ background: "#1b4332", color: "white" }}>Gemini</option>
+                <option value="anthropic" style={{ background: "#1b4332", color: "white" }}>Anthropic</option>
+              </select>
             </div>
           </div>
           <div className="mt-4 flex flex-wrap items-center gap-4">

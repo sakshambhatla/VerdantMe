@@ -117,6 +117,7 @@ export interface DiscoverRolesParams {
   use_cache?: boolean;
   role_filters?: RoleFiltersParams;
   relevance_score_criteria?: string;
+  model_provider?: string;
 }
 
 export interface RolesCheckpoint {

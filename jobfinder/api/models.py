@@ -22,3 +22,4 @@ class DiscoverRolesRequest(BaseModel):
     use_cache: bool = False  # re-use cached roles (TTL: 2 days) per company+ATS
     role_filters: RoleFiltersRequest | None = None  # overrides config.role_filters
     relevance_score_criteria: str | None = None  # overrides config
+    model_provider: str | None = None  # overrides config

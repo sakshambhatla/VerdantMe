@@ -32,6 +32,8 @@ async def discover_roles_endpoint(req: DiscoverRolesRequest, request: Request) -
     registry.  Omit to use all companies from the last discovery run.
     """
     overrides: dict = {}
+    if req.model_provider is not None:
+        overrides["model_provider"] = req.model_provider
     if req.relevance_score_criteria is not None:
         overrides["relevance_score_criteria"] = req.relevance_score_criteria
     if req.role_filters is not None:
