@@ -13,32 +13,51 @@ function App() {
         <div className="glass-orb glass-orb-3" />
       </div>
 
-      {/* Frosted glass header */}
-      <header
-        className="sticky top-0 z-10 border-b px-6 py-4"
-        style={{
-          background: "var(--glass-header-bg)",
-          backdropFilter: "blur(20px)",
-          WebkitBackdropFilter: "blur(20px)",
-          borderColor: "var(--glass-border)",
-        }}
-      >
-        <div className="max-w-6xl mx-auto">
-          <h1 className="text-xl font-bold tracking-tight text-white">JobFinder</h1>
-          <p className="text-sm" style={{ color: "rgba(255,255,255,0.55)" }}>
-            Discover companies and roles matched to your resume
-          </p>
-        </div>
-      </header>
+      <Tabs defaultValue="resume">
+        {/*
+          Sticky header — contains both the title block and the full-width tab band.
+          Keeping them in one element means the tab band sticks at exactly the right
+          offset without any hardcoded pixel arithmetic.
+        */}
+        <header
+          className="sticky top-0 z-20"
+          style={{
+            background: "var(--glass-header-bg)",
+            backdropFilter: "blur(20px)",
+            WebkitBackdropFilter: "blur(20px)",
+          }}
+        >
+          {/* Title section */}
+          <div
+            className="py-7 text-center border-b"
+            style={{ borderColor: "var(--glass-border)" }}
+          >
+            <h1
+              className="text-5xl font-black tracking-tight text-white leading-none"
+              style={{ fontFamily: "var(--font-display)" }}
+            >
+              Job Hunter
+            </h1>
+            <p className="mt-2 text-sm" style={{ color: "rgba(255,255,255,0.50)" }}>
+              Discover companies and roles matched to your resume
+            </p>
+          </div>
 
-      <main className="relative z-10 max-w-6xl mx-auto px-6 py-8">
-        <Tabs defaultValue="resume">
-          <TabsList className="mb-6">
-            <TabsTrigger value="resume">📄 Upload Resume</TabsTrigger>
-            <TabsTrigger value="companies">🏢 Discover Companies</TabsTrigger>
-            <TabsTrigger value="roles">💼 Discover Roles</TabsTrigger>
-          </TabsList>
+          {/* Full-width tab navigation band */}
+          <div
+            className="border-b"
+            style={{ borderColor: "var(--glass-border)" }}
+          >
+            <TabsList className="justify-center">
+              <TabsTrigger value="resume">📄 Upload Resume</TabsTrigger>
+              <TabsTrigger value="companies">🏢 Discover Companies</TabsTrigger>
+              <TabsTrigger value="roles">💼 Discover Roles</TabsTrigger>
+            </TabsList>
+          </div>
+        </header>
 
+        {/* Page content */}
+        <main className="relative z-10 max-w-6xl mx-auto px-6 py-8">
           <TabsContent value="resume">
             <ResumeTab />
           </TabsContent>
@@ -48,8 +67,8 @@ function App() {
           <TabsContent value="roles">
             <RolesTab />
           </TabsContent>
-        </Tabs>
-      </main>
+        </main>
+      </Tabs>
     </div>
   );
 }
