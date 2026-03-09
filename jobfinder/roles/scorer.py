@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import time
 
 from jobfinder.config import AppConfig
@@ -85,27 +86,32 @@ def _call_gemini(prompt: str, config: AppConfig, *, _attempt: int = 0) -> str:
         if getattr(exc, "code", None) == 429:
             detail = str(exc)
             console.print(f"[yellow]  Gemini 429 detail: {detail}[/yellow]")
+            dl = detail.lower()
 
-            is_per_minute = any(
-                kw in detail.lower()
-                for kw in ("per_minute", "per minute", "perminute", "requests_per_minute")
-            )
-            if is_per_minute and _attempt < 3:
-                wait = 65
+            is_daily = "perday" in dl or "per_day" in dl
+            is_per_minute = "perminute" in dl or "per_minute" in dl
+
+            if is_per_minute and not is_daily and _attempt < 3:
+                m = re.search(r"retry in ([\d.]+)s", dl)
+                wait = int(float(m.group(1))) + 5 if m else 65
                 console.print(
                     f"[yellow]  RPM limit — waiting {wait}s, retry {_attempt + 1}/3...[/yellow]"
                 )
                 time.sleep(wait)
                 return _call_gemini(prompt, config, _attempt=_attempt + 1)
 
-            quota_type = (
-                "per-minute limit (retries exhausted)" if is_per_minute else "daily quota"
-            )
+            if is_daily:
+                tip = "Daily quota resets at midnight Pacific. Try again tomorrow, or set gemini_model='gemini-2.0-flash' / model_provider='anthropic' in config.json."
+                quota_type = "daily quota"
+            elif is_per_minute:
+                tip = "Per-minute retries exhausted. Set gemini_model='gemini-2.0-flash' or model_provider='anthropic' in config.json."
+                quota_type = "per-minute limit"
+            else:
+                tip = "Check your quota at https://ai.dev/rate-limit."
+                quota_type = "quota"
+
             raise RateLimitError(
-                f"Gemini {quota_type} exceeded.\n"
-                f"Detail: {detail}\n"
-                f"Tip: try 'gemini-2.0-flash' in config.json (higher free-tier RPD) "
-                f"or switch to model_provider='anthropic'."
+                f"Gemini {quota_type} exceeded.\n{tip}"
             ) from exc
         raise
     return response.text
