@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from jobfinder.companies.prompts import SYSTEM_PROMPT, build_user_prompt
 from jobfinder.config import AppConfig
 from jobfinder.storage.schemas import DiscoveredCompany
+from jobfinder.utils.http import head_ok
 
 
 def discover_companies(
@@ -81,19 +82,6 @@ def _call_gemini(resumes: list[dict], config: AppConfig) -> str:
     return "".join(chunks)
 
 
-def _head(url: str, timeout: int = 10) -> bool:
-    """Return True if url responds with a 2xx or 3xx status code."""
-    import httpx
-    try:
-        with httpx.Client(timeout=timeout, follow_redirects=True) as client:
-            r = client.head(url)
-            if r.status_code == 405:  # HEAD not allowed → try GET
-                r = client.get(url)
-            return r.status_code < 400
-    except Exception:
-        return False
-
-
 _ATS_CHECK_URLS: dict[str, str] = {
     "greenhouse": "https://boards-api.greenhouse.io/v1/boards/{token}/jobs",
     "lever": "https://api.lever.co/v0/postings/{token}",
@@ -107,7 +95,7 @@ def _validate_companies(companies: list[DiscoveredCompany], timeout: int = 10) -
 
     for c in companies:
         if c.career_page_url:
-            if not _head(c.career_page_url, timeout=timeout):
+            if not head_ok(c.career_page_url, timeout=timeout):
                 console.print(
                     f"  [yellow]⚠[/yellow] {c.name}: career_page_url unreachable — cleared"
                 )
@@ -115,7 +103,7 @@ def _validate_companies(companies: list[DiscoveredCompany], timeout: int = 10) -
 
         if c.ats_type in _ATS_CHECK_URLS and c.ats_board_token:
             check_url = _ATS_CHECK_URLS[c.ats_type].format(token=c.ats_board_token)
-            if not _head(check_url, timeout=timeout):
+            if not head_ok(check_url, timeout=timeout):
                 console.print(
                     f"  [yellow]⚠[/yellow] {c.name}: ats_board_token "
                     f"'{c.ats_board_token}' not found on {c.ats_type} — cleared"

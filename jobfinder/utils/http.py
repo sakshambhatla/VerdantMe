@@ -13,6 +13,19 @@ MAX_RETRIES = 3
 BACKOFF_BASE = 2  # seconds
 
 
+def head_ok(url: str, timeout: int = 5) -> bool:
+    """Return True if url responds with a non-error status (2xx or 3xx).
+    Falls back to GET if the server returns 405 on HEAD."""
+    try:
+        with httpx.Client(timeout=timeout, follow_redirects=True) as client:
+            r = client.head(url)
+            if r.status_code == 405:  # HEAD not allowed → try GET
+                r = client.get(url)
+            return r.status_code < 400
+    except Exception:
+        return False
+
+
 def get_json(
     url: str, timeout: int = 30, params: dict | None = None
 ) -> dict | list:

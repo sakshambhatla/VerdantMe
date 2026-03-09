@@ -92,10 +92,17 @@ def discover_roles(
 
     # ── Pass 2: career page supplemental fetch ───────────────────────────────
     existing_urls: set[str] = {r.url for r in all_roles if r.url}
+    flagged_names: set[str] = {f.name.lower() for f in flagged}
 
     for company in companies:
         if not company.career_page_url:
             continue
+
+        is_fallback = company.name.lower() in flagged_names
+        if is_fallback:
+            console.print(
+                f"  [yellow]↳ ATS failed — trying career page for {company.name}...[/yellow]"
+            )
 
         # Cache check for career page
         if use_cache:
@@ -110,6 +117,9 @@ def discover_roles(
                     f"  [dim]{company.name} (career_page)[/dim]: "
                     f"{len(cached_cp)} roles (cached {age:.0f}h ago)"
                 )
+                if is_fallback and cached_cp:
+                    flagged = [f for f in flagged if f.name.lower() != company.name.lower()]
+                    flagged_names.discard(company.name.lower())
                 update_registry_searchable(store, company.name, bool(cached_cp))
                 continue
 
@@ -125,14 +135,27 @@ def discover_roles(
                 if new_roles:
                     all_roles.extend(new_roles)
                     existing_urls.update(r.url for r in new_roles if r.url)
+                cache.put(company.name, "career_page", cp_roles)
+                searchable = bool(cp_roles)
+                if is_fallback and cp_roles:
+                    flagged = [f for f in flagged if f.name.lower() != company.name.lower()]
+                    flagged_names.discard(company.name.lower())
+                    console.print(
+                        f"  [green]✓ {company.name}[/green]: rescued via career page "
+                        f"({len(cp_roles)} roles, {len(new_roles)} new)"
+                    )
+                elif new_roles:
                     console.print(
                         f"  [green]{company.name}[/green]: "
                         f"{len(new_roles)} additional roles via career page"
                     )
-                cache.put(company.name, "career_page", cp_roles)
-                searchable = bool(cp_roles)
             except Exception as exc:
-                display_warning(f"{company.name}: career page fetch failed — {exc}")
+                if is_fallback:
+                    display_warning(
+                        f"{company.name}: ATS failed and career page also unreachable — {exc}"
+                    )
+                else:
+                    display_warning(f"{company.name}: career page fetch failed — {exc}")
                 searchable = False
 
             update_registry_searchable(store, company.name, searchable)

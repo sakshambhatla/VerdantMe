@@ -17,6 +17,10 @@ extract all visible job postings and return ONLY a JSON array where each element
   - url:        full URL to the job posting (string, empty string if not found)
   - department: department or team (string or null)
 
+Do not invent or construct URLs. Only include the exact href values that are explicitly \
+present as hyperlinks in the HTML. If a job listing has no visible link, use an empty \
+string for url.
+
 If you cannot find any job listings — because the page requires login, is \
 JavaScript-rendered with no visible content, or simply has no open roles — \
 return an empty array: []
@@ -34,11 +38,22 @@ def fetch_career_page_roles(
     Returns an empty list if the page is unreachable, JS-only, or has no jobs.
     Never raises — callers rely on empty list as the failure signal.
     """
+    from jobfinder.utils.display import console
+
     html = _fetch_html(career_page_url, timeout=config.request_timeout)
     if html is None:
         return []
     raw_text = _call_llm(html, config)
-    return _parse_roles(raw_text, company_name)
+    roles = _parse_roles(raw_text, company_name)
+    if roles:
+        validated = _validate_role_urls(roles, config.request_timeout)
+        dropped = len(roles) - len(validated)
+        if dropped:
+            console.print(
+                f"  [dim]URL validation: {len(validated)} kept, {dropped} dropped[/dim]"
+            )
+        return validated
+    return roles
 
 
 # ── internal helpers ────────────────────────────────────────────────────────
@@ -103,6 +118,26 @@ def _call_gemini(html: str, config: AppConfig) -> str:
         config=types.GenerateContentConfig(system_instruction=_SYSTEM_PROMPT),
     )
     return response.text or ""
+
+
+def _validate_role_urls(
+    roles: list[DiscoveredRole], timeout: int
+) -> list[DiscoveredRole]:
+    """HEAD-check all non-empty URLs; drop roles whose URLs return 4xx/5xx or fail."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    from jobfinder.utils.http import head_ok
+
+    to_check = [(i, r) for i, r in enumerate(roles) if r.url]
+    if not to_check:
+        return roles
+
+    cap = min(timeout, 5)
+    with ThreadPoolExecutor(max_workers=10) as ex:
+        ok_flags = list(ex.map(lambda x: head_ok(x[1].url, cap), to_check))
+
+    valid_indices = {idx for (idx, _), ok in zip(to_check, ok_flags) if ok}
+    return [r for i, r in enumerate(roles) if not r.url or i in valid_indices]
 
 
 def _parse_roles(raw_text: str, company_name: str) -> list[DiscoveredRole]:
