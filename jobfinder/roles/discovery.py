@@ -74,7 +74,8 @@ def discover_roles(
                     )
                 )
                 display_warning(
-                    f"{company.name}: {company.ats_type} not supported — manual check needed"
+                    f"{company.name}: {company.ats_type} ATS has no public API — "
+                    f"flagged (try 'Fetch via Browser Agent')"
                 )
             except ATSFetchError as exc:
                 flagged.append(
@@ -118,6 +119,11 @@ def discover_roles(
 
     for company in companies:
         if not company.career_page_url:
+            if company.name.lower() in flagged_names:
+                console.print(
+                    f"  [dim]{company.name}: no career page URL configured — "
+                    f"skipping (use browser agent to fetch)[/dim]"
+                )
             continue
 
         is_fallback = company.name.lower() in flagged_names
@@ -173,7 +179,8 @@ def discover_roles(
                     )
                 elif is_fallback and not cp_roles:
                     display_warning(
-                        f"{company.name}: career page returned no roles — manual check needed"
+                        f"{company.name}: career page returned no roles — "
+                        f"try 'Fetch via Browser Agent' for agentic extraction"
                     )
                 else:
                     # ATS succeeded and career page added nothing new — clarify impact
@@ -198,8 +205,17 @@ def discover_roles(
     console.print(
         f"\n[bold]Fetch complete[/bold]: {len(all_roles)} roles"
         + (f" across {n_unique_cos} companies" if n_unique_cos != n_companies else "")
-        + (f" · [yellow]{n_final_flagged} flagged[/yellow] (no ATS + career page empty)"
-           if n_final_flagged else "")
+        + (f" · [yellow]{n_final_flagged} flagged[/yellow]" if n_final_flagged else "")
     )
+    if n_final_flagged:
+        flagged_names_str = ", ".join(f.name for f in flagged)
+        console.print(
+            f"  [dim]Flagged ({flagged_names_str}): no public ATS API and no static "
+            f"career page content found.[/dim]"
+        )
+        console.print(
+            f"  [dim]→ Note: 'Fetch via Browser Agent' is a separate explicit action "
+            f"(not part of this pipeline) — use it in the UI for flagged companies.[/dim]"
+        )
 
     return all_roles, flagged
