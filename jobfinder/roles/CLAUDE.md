@@ -8,12 +8,15 @@ discovery.py   # discover_roles(companies, config) → (list[DiscoveredRole], li
 filters.py     # filter_roles(roles, filters, config) → list[DiscoveredRole]
 scorer.py      # score_roles(roles, criteria, config) → list[DiscoveredRole]  (sorted by score)
 ats/
-  __init__.py  # ATS_REGISTRY: dict[str, BaseFetcher] — maps ats_type → fetcher instance
-  base.py      # BaseFetcher ABC; ATSFetchError, UnsupportedATSError
-  greenhouse.py# boards-api.greenhouse.io/v1/boards/{token}/jobs
-  lever.py     # api.lever.co/v0/postings/{company}?mode=json
-  ashby.py     # api.ashbyhq.com/posting-api/job-board/{token}
-  unsupported.py# raises UnsupportedATSError (Workday/LinkedIn/unknown)
+  __init__.py       # ATS_REGISTRY: dict[str, BaseFetcher] — maps ats_type → fetcher instance
+  base.py           # BaseFetcher ABC; ATSFetchError, UnsupportedATSError
+  greenhouse.py     # boards-api.greenhouse.io/v1/boards/{token}/jobs
+  lever.py          # api.lever.co/v0/postings/{company}?mode=json
+  ashby.py          # api.ashbyhq.com/posting-api/job-board/{token}
+  unsupported.py    # raises UnsupportedATSError (Workday/LinkedIn/unknown)
+  browser_session.py# AgentSession (queue + kill_event + task), AgentMetrics, RateLimitStrategy
+  career_page.py    # Tier 2 HTML scraping + Tier 3 browser agent; _StreamingLLMWrapper,
+                    # _run_browser_agent_streaming, _build_task_prompt, _maybe_save_api_profile
 ```
 
 ## ATS Fetching (`discovery.py`)
@@ -53,3 +56,36 @@ from jobfinder.utils.throttle import get_limiter
 get_limiter(config.rpm_limit).wait()
 ```
 The limiter is a process-level singleton, so filter + scorer calls share the same sliding window.
+
+## Browser Agent (Tier 3 — `ats/career_page.py`)
+
+Used when a company's career page can't be read via a public API or static HTML scraping.
+
+**Streaming architecture** (`_run_browser_agent_streaming`):
+- `_StreamingLLMWrapper` wraps the LLM passed to `browser-use`. It intercepts every `ainvoke`/`invoke` call, parses the model's JSON response for a `jobs` array, and posts a `jobs_batch` event to `session.event_queue` in real time — so the SSE endpoint can stream partial results to the UI without waiting for the full run.
+- The agent runs as a separate `asyncio.Task` via `_run_with_kill_check()`, which polls `session.kill_event.is_set()` every 500 ms. Setting the kill event causes the task to cancel cleanly.
+- Hard time budget: `asyncio.wait_for(agent.run(), timeout=max_seconds)` in `_run_browser_agent_streaming`. A `TimeoutError` results in a `killed` (time_limit) terminal event.
+
+**Kill signal flow**:
+```
+DELETE /roles/fetch-browser/{name}
+  → session.kill_event.set()
+  → session.task.cancel()
+  → generator finally-block posts killed event and removes session from app.state.running_agents
+```
+
+**API profile injection** (`_build_task_prompt`):
+- `load_profile(career_page_url, store)` — looks up the company domain in `data/api_profiles.json`
+- If a profile exists (endpoint URL + query params from a prior successful run), it is injected verbatim into the task prompt so the agent skips re-discovery and goes straight to extraction
+- On success, `_maybe_save_api_profile` writes the discovered endpoint back to `api_profiles.json`
+
+**`AgentSession`** (`ats/browser_session.py`):
+```python
+@dataclass
+class AgentSession:
+    event_queue: asyncio.Queue      # maxsize=200; events streamed to SSE generator
+    kill_event: asyncio.Event       # set by DELETE endpoint or time limit
+    metrics: AgentMetrics           # steps_taken, jobs_collected, rate_limit_hits, …
+    partial_roles: list             # accumulated DiscoveredRole objects
+    task: asyncio.Task | None       # the running asyncio task; None until started
+```

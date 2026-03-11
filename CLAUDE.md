@@ -24,8 +24,9 @@ jobfinder/
   companies/    # discover_companies(resumes, config) — LLM → JSON → DiscoveredCompany[]
   roles/        # → see jobfinder/roles/CLAUDE.md
   storage/
-    schemas.py  # ALL Pydantic models — edit here first when changing data shapes
-    store.py    # StorageManager: atomic JSON read/write
+    schemas.py      # ALL Pydantic models — edit here first when changing data shapes
+    store.py        # StorageManager: atomic JSON read/write
+    api_profiles.py # load/save discovered career-page API endpoints (data/api_profiles.json)
   utils/
     http.py     # get_json(url, timeout) with retry
     display.py  # Rich console helpers
@@ -51,6 +52,12 @@ role_filters.confidence  "high"|"medium"|"low"   default "high"
 relevance_score_criteria  string | null    LLM scores roles 1–10, sorted highest-first
 write_preference      "overwrite"|"merge"  merge deduplicates + re-sorts; default "overwrite"
 rpm_limit             int                  client-side throttle; 0 = off; default 4
+
+# Browser agent (config.json only — not exposed in UI)
+browser_agent_max_time_minutes     int  default 7   hard wall; agent cancelled after N minutes
+browser_agent_max_steps            int  default 50  step budget for browser-use Agent.run
+browser_agent_rate_limit_max_retries   int  default 5  give up after N consecutive 429s
+browser_agent_rate_limit_initial_wait  int  default 5  initial back-off seconds; doubles each hit
 ```
 API keys from env only: `ANTHROPIC_API_KEY` or `GEMINI_API_KEY`.
 

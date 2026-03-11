@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 from datetime import datetime, timezone
@@ -15,6 +16,9 @@ from jobfinder.config import AppConfig
 from jobfinder.storage.schemas import DiscoveredCompany
 from jobfinder.utils.http import head_ok
 
+_BATCH_SIZE = 20   # companies per LLM call — safe within max_tokens=4096
+_MAX_BATCHES = 5   # hard cap: at most 100 companies total
+
 
 def discover_companies(
     resumes: list[dict],
@@ -22,20 +26,67 @@ def discover_companies(
     *,
     seed_companies: list[str] | None = None,
 ) -> list[DiscoveredCompany]:
-    """Discover companies using the configured model provider."""
-    if config.model_provider == "gemini":
-        raw_text = _call_gemini(resumes, config, seed_companies=seed_companies)
-    else:
-        raw_text = _call_anthropic(resumes, config, seed_companies=seed_companies)
+    """Discover companies in batches to avoid LLM response truncation.
 
-    companies = _parse_response(raw_text)
-    _validate_companies(companies, timeout=config.request_timeout)
+    Each batch requests up to _BATCH_SIZE companies and passes already-found
+    names as exclusions so the model doesn't repeat them. Stops early when
+    the model returns no new companies or max_companies is reached.
+    """
+    from jobfinder.utils.display import console
+
+    num_batches = min(_MAX_BATCHES, math.ceil(config.max_companies / _BATCH_SIZE))
+
+    all_companies: list[DiscoveredCompany] = []
+    seen_names: set[str] = set()
+
+    for batch_num in range(num_batches):
+        remaining = config.max_companies - len(all_companies)
+        if remaining <= 0:
+            break
+
+        batch_size = min(_BATCH_SIZE, remaining)
+        exclude = list(seen_names)
+
+        if num_batches > 1:
+            console.print(
+                f"  [dim]Batch {batch_num + 1}/{num_batches} "
+                f"(requesting {batch_size}, {len(all_companies)} found so far)[/dim]"
+            )
+
+        if config.model_provider == "gemini":
+            raw_text = _call_gemini(
+                resumes, config,
+                seed_companies=seed_companies,
+                batch_size=batch_size,
+                exclude_names=exclude,
+            )
+        else:
+            raw_text = _call_anthropic(
+                resumes, config,
+                seed_companies=seed_companies,
+                batch_size=batch_size,
+                exclude_names=exclude,
+            )
+
+        batch = _parse_response(raw_text)
+        new = [c for c in batch if c.name.lower() not in seen_names]
+
+        if not new:
+            console.print(
+                f"  [dim]No new companies in batch {batch_num + 1} — stopping early[/dim]"
+            )
+            break
+
+        seen_names.update(c.name.lower() for c in new)
+        all_companies.extend(new)
+
+    _validate_companies(all_companies, timeout=config.request_timeout)
 
     now = datetime.now(timezone.utc).isoformat()
-    for c in companies:
+    for c in all_companies:
         c.discovered_at = now
 
-    return companies
+    return all_companies
 
 
 def _call_anthropic(
@@ -43,6 +94,8 @@ def _call_anthropic(
     config: AppConfig,
     *,
     seed_companies: list[str] | None = None,
+    batch_size: int = _BATCH_SIZE,
+    exclude_names: list[str] | None = None,
 ) -> str:
     from jobfinder.utils.throttle import get_limiter
     get_limiter(config.rpm_limit).wait()
@@ -52,10 +105,10 @@ def _call_anthropic(
     client = anthropic.Anthropic()
     if seed_companies:
         system = SEED_SYSTEM_PROMPT
-        user_prompt = build_seed_user_prompt(seed_companies, config.max_companies)
+        user_prompt = build_seed_user_prompt(seed_companies, batch_size, exclude_names=exclude_names)
     else:
         system = SYSTEM_PROMPT
-        user_prompt = build_user_prompt(resumes, config.max_companies)
+        user_prompt = build_user_prompt(resumes, batch_size, exclude_names=exclude_names)
 
     print()  # blank line before stream
     chunks: list[str] = []
@@ -77,6 +130,8 @@ def _call_gemini(
     config: AppConfig,
     *,
     seed_companies: list[str] | None = None,
+    batch_size: int = _BATCH_SIZE,
+    exclude_names: list[str] | None = None,
     _attempt: int = 0,
 ) -> str:
     import time
@@ -93,10 +148,10 @@ def _call_gemini(
     client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
     if seed_companies:
         system = SEED_SYSTEM_PROMPT
-        user_prompt = build_seed_user_prompt(seed_companies, config.max_companies)
+        user_prompt = build_seed_user_prompt(seed_companies, batch_size, exclude_names=exclude_names)
     else:
         system = SYSTEM_PROMPT
-        user_prompt = build_user_prompt(resumes, config.max_companies)
+        user_prompt = build_user_prompt(resumes, batch_size, exclude_names=exclude_names)
 
     print()  # blank line before stream
     chunks: list[str] = []
@@ -124,7 +179,13 @@ def _call_gemini(
                     f"[yellow]  Retrying in {retry_wait}s ({_attempt + 1}/3)...[/yellow]"
                 )
                 time.sleep(retry_wait)
-                return _call_gemini(resumes, config, seed_companies=seed_companies, _attempt=_attempt + 1)
+                return _call_gemini(
+                    resumes, config,
+                    seed_companies=seed_companies,
+                    batch_size=batch_size,
+                    exclude_names=exclude_names,
+                    _attempt=_attempt + 1,
+                )
 
             tip = (
                 "Daily quota resets at midnight Pacific. Try gemini_model='gemini-2.0-flash' or model_provider='anthropic'."
@@ -143,9 +204,27 @@ _ATS_CHECK_URLS: dict[str, str] = {
     "ashby": "https://api.ashbyhq.com/posting-api/job-board/{token}",
 }
 
+# Probe order for ATS auto-detection (most to least common)
+_ATS_PROBE_ORDER = ["greenhouse", "lever", "ashby"]
+
+
+def _name_to_slug(name: str) -> str:
+    """Convert a company name to a likely ATS board slug.
+
+    Examples: "Postman" → "postman", "Scale AI" → "scale-ai"
+    """
+    slug = name.lower().replace(" ", "-")
+    slug = re.sub(r"[^a-z0-9-]", "", slug)
+    slug = re.sub(r"-+", "-", slug).strip("-")
+    return slug
+
 
 def _validate_companies(companies: list[DiscoveredCompany], timeout: int = 10) -> None:
-    """Validate career_page_url and ats_board_token in place; log warnings for failures."""
+    """Validate career_page_url and ats_board_token in place; log warnings for failures.
+
+    Also auto-detects ATS for companies with ats_type == 'unknown' or missing board token
+    by probing Greenhouse → Lever → Ashby with a slug derived from the company name.
+    """
     from jobfinder.utils.display import console
 
     for c in companies:
@@ -164,6 +243,26 @@ def _validate_companies(companies: list[DiscoveredCompany], timeout: int = 10) -
                     f"'{c.ats_board_token}' not found on {c.ats_type} — cleared"
                 )
                 c.ats_board_token = None
+
+        # Auto-detect ATS for unknown/unresolved companies
+        if c.ats_type == "unknown" or not c.ats_board_token:
+            slug = _name_to_slug(c.name)
+            detected = False
+            for ats_name in _ATS_PROBE_ORDER:
+                probe_url = _ATS_CHECK_URLS[ats_name].format(token=slug)
+                if head_ok(probe_url, timeout=timeout):
+                    c.ats_type = ats_name
+                    c.ats_board_token = slug
+                    console.print(
+                        f"  [green]✓[/green] {c.name}: auto-detected as {ats_name} "
+                        f"(token: {slug!r})"
+                    )
+                    detected = True
+                    break
+            if not detected and c.ats_type == "unknown":
+                console.print(
+                    f"  [dim]{c.name}: ATS not auto-detected — will try career page[/dim]"
+                )
 
 
 def _parse_response(raw_text: str) -> list[DiscoveredCompany]:

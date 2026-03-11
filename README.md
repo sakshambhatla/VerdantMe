@@ -177,6 +177,10 @@ Set any `role_filters` field to `null` (or omit it) to skip that filter. Omit `r
 | `relevance_score_criteria` | `null` | Keywords/description for scoring roles 1–10 (e.g. `"spark, flink, data pipelines"`); roles sorted highest-first in output |
 | `write_preference` | `"overwrite"` | `"overwrite"` replaces existing output; `"merge"` combines with existing data, deduplicates, and re-sorts |
 | `rpm_limit` | `4` | Max LLM requests per minute (client-side throttle). Set to `0` to disable. Default is `4` — safe for Gemini free tier (5 RPM max). |
+| `browser_agent_max_time_minutes` | `7` | Hard time limit for the browser-use agent; cancelled automatically when reached |
+| `browser_agent_max_steps` | `50` | Step budget passed to browser-use `Agent.run(max_steps=...)` |
+| `browser_agent_rate_limit_max_retries` | `5` | Give up after this many consecutive 429 / rate-limit responses |
+| `browser_agent_rate_limit_initial_wait` | `5` | Initial back-off in seconds; doubles each consecutive rate-limit hit (capped at 120 s) |
 
 CLI flags override config file values (e.g. `--max-companies 25` overrides `max_companies`).
 
@@ -191,6 +195,7 @@ All output is written to `data/`:
 | `data/company_registry.json` | Perpetual registry of all companies ever discovered; grows with every Discover Companies run; includes `searchable` field updated after career page fetch attempts; used by `--company` and the "Select from Registry" UI panel |
 | `data/company_registry_archive.json` | Previous registry snapshot (archived before first clean run) |
 | `data/roles.json` | Fetched roles + companies flagged for manual check |
+| `data/api_profiles.json` | Discovered career-page API endpoints, keyed by domain; automatically populated by the browser agent; injected into subsequent agent runs to skip re-discovery |
 
 ## ATS Support
 
@@ -208,6 +213,51 @@ Role discovery uses public APIs — no authentication required:
 Companies using unsupported ATS types are surfaced with their career page URL
 so you can check them manually. Career page scraping may also surface roles for
 these companies if their page is server-rendered.
+
+### Browser Agent (Tier 3 — interactive pages)
+
+When a company's career page can't be read via a public API or static HTML
+scraping, you can use a **browser-use agent** that drives a real Chromium
+browser to interact with the page, navigate pagination, and extract all roles.
+
+**Setup (optional):**
+```bash
+pip install browser-use
+playwright install chromium
+```
+
+**From the UI:** after a role discovery run, flagged companies appear in a
+yellow panel. Click **Fetch via Browser Agent** next to any company to start
+a live streaming session:
+
+- A spinner shows "N jobs found…" as the agent collects roles in real time
+- If role filters are configured, the filter pipeline runs on each batch and
+  matching roles appear in the main table immediately — no full page refresh
+- Click **■ Kill Agent** at any time to stop; partial jobs collected so far
+  are saved to `roles.json`
+- Clicking **Retry** restarts the agent after a kill or error
+- Multiple companies can run concurrently
+
+**From the CLI:**
+```bash
+jobfinder discover-roles --company "Netflix"
+# If Netflix is flagged (Workday/etc.), the browser agent runs automatically
+```
+
+**Browser agent config** (`config.json` only — not in the UI):
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `browser_agent_max_time_minutes` | `7` | Hard time wall; agent is cancelled after this many minutes |
+| `browser_agent_max_steps` | `50` | Step budget passed to browser-use Agent.run |
+| `browser_agent_rate_limit_max_retries` | `5` | Give up after this many consecutive 429 responses |
+| `browser_agent_rate_limit_initial_wait` | `5` | Initial back-off in seconds; doubles each consecutive hit |
+
+**API intelligence:** When the browser agent successfully discovers a company's
+internal jobs API (e.g. Eightfold, Phenom), it records the endpoint in
+`data/api_profiles.json`. On the next run for the same company, the known
+endpoint is injected into the agent's task prompt so it skips re-discovery
+and goes straight to extraction.
 
 ### Planned ATS support
 

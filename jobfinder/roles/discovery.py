@@ -149,6 +149,10 @@ def discover_roles(
                         f"  [green]{company.name}[/green]: "
                         f"{len(new_roles)} additional roles via career page"
                     )
+                elif is_fallback and not cp_roles:
+                    display_warning(
+                        f"{company.name}: career page returned no roles — manual check needed"
+                    )
             except Exception as exc:
                 if is_fallback:
                     display_warning(

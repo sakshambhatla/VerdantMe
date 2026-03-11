@@ -26,15 +26,25 @@ Always include the seed companies themselves in the results. Prioritize companie
 """
 
 
-def build_seed_user_prompt(seed_companies: list[str], max_companies: int) -> str:
+def build_seed_user_prompt(
+    seed_companies: list[str],
+    max_companies: int,
+    exclude_names: list[str] | None = None,
+) -> str:
     """Build the user message for seed-based company discovery."""
     seeds = ", ".join(seed_companies)
-    return (
+    prompt = (
         f"Seed companies: {seeds}\n\n"
         f"Please return up to {max_companies} companies that are in the same "
         f"industry or product space as the seed companies. "
         f"Always include the seed companies themselves in your response."
     )
+    if exclude_names:
+        prompt += (
+            f"\n\nDo NOT suggest these companies (already found): "
+            f"{', '.join(exclude_names)}"
+        )
+    return prompt
 
 
 SYSTEM_PROMPT = """\
@@ -68,6 +78,7 @@ Prioritize companies that:
 def build_user_prompt(
     resumes: list[dict],
     max_companies: int,
+    exclude_names: list[str] | None = None,
 ) -> str:
     """Build the user message from parsed resume data."""
     parts: list[str] = []
@@ -92,5 +103,11 @@ def build_user_prompt(
         parts.append(f"Previous employers: {', '.join(set(all_companies))}")
 
     parts.append(f"\nPlease suggest up to {max_companies} companies that would be a good fit.")
+
+    if exclude_names:
+        parts.append(
+            f"Do NOT suggest these companies (already found): "
+            f"{', '.join(exclude_names)}"
+        )
 
     return "\n".join(parts)

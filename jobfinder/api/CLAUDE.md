@@ -9,7 +9,7 @@ models.py     # Request-only Pydantic models (responses use storage/schemas.py d
 routes/
   resume.py   # POST /api/resume/upload · GET /api/resume
   companies.py# POST /api/companies/discover · GET /api/companies
-  roles.py    # POST /api/roles/discover · GET /api/roles
+  roles.py    # POST /api/roles/discover · GET /api/roles · GET /api/roles/fetch-browser/stream (SSE) · DELETE /api/roles/fetch-browser/{name} · POST /api/roles/fetch-browser
 ```
 
 ## Endpoints
@@ -22,6 +22,9 @@ routes/
 | GET | `/api/companies` | Reads `companies.json`, 404 if absent |
 | POST | `/api/roles/discover` | Fetches ATS roles, applies filters + scoring, applies merge logic, writes `roles.json` |
 | GET | `/api/roles` | Reads `roles.json`, 404 if absent |
+| GET | `/api/roles/fetch-browser/stream` | SSE stream — starts browser agent for `company_name` query param; emits `jobs_batch`, `filter_result`, `done`, `killed`, `error` events |
+| DELETE | `/api/roles/fetch-browser/{company_name}` | Kill a running browser agent; returns `{killed, partial_jobs}` |
+| POST | `/api/roles/fetch-browser` | Non-streaming browser fetch (CLI path); blocks until agent finishes |
 
 ## Key Patterns
 
@@ -41,6 +44,26 @@ except SystemExit as exc:
 ```
 
 **Merge logic**: duplicated from `cli.py` — dedup companies by `name.lower()`, roles by `url`. New results take precedence. Sort roles by `relevance_score` descending.
+
+**SSE streaming** (browser agent): `GET /roles/fetch-browser/stream` uses `EventSourceResponse` from `sse_starlette`. An async generator drains `session.event_queue`, dispatches named events, and flushes in-flight filter tasks before the terminal event:
+```python
+from sse_starlette.sse import EventSourceResponse
+
+async def event_generator():
+    pending_filter_tasks: list[asyncio.Task] = []
+    while True:
+        event = session.event_queue.get_nowait()   # drain non-blocking
+        if event_type == "jobs_batch" and config.role_filters:
+            pending_filter_tasks.append(asyncio.create_task(_filter_and_post(jobs)))
+        yield {"event": event_type, "data": json.dumps(event)}
+        if event_type in ("done", "killed", "error"):
+            await asyncio.gather(*pending_filter_tasks, return_exceptions=True)
+            break
+
+return EventSourceResponse(event_generator())
+```
+
+**`app.state.running_agents`**: dict keyed by company name (string), holding live `AgentSession` objects. Populated at stream start, removed in the `finally` block of the generator. The DELETE endpoint looks up sessions here to set `kill_event` and cancel the task.
 
 **Production static files**: `main.py` mounts `ui/dist/` at `/` only if the directory exists — so the server works fine during development without a built UI.
 
