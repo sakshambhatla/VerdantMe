@@ -196,19 +196,23 @@ def _fetch_html_playwright(url: str, timeout: int) -> str | None:
 
 
 def _build_browser_llm(config: AppConfig):
-    """Build a LangChain-compatible LLM for browser-use from the app config."""
+    """Build a browser-use native LLM from the app config.
+
+    browser-use 0.12+ ships its own LLM wrappers under ``browser_use.llm``
+    and no longer requires LangChain as a bridge.
+    """
     if config.model_provider == "gemini":
         import os
-        from langchain_google_genai import ChatGoogleGenerativeAI  # type: ignore
+        from browser_use.llm.google.chat import ChatGoogle  # type: ignore
 
-        return ChatGoogleGenerativeAI(
+        return ChatGoogle(
             model=config.gemini_model,
-            google_api_key=os.environ.get("GEMINI_API_KEY"),
+            api_key=os.environ.get("GEMINI_API_KEY"),
         )
     else:
-        from langchain_anthropic import ChatAnthropic  # type: ignore
+        from browser_use.llm.anthropic.chat import ChatAnthropic  # type: ignore
 
-        return ChatAnthropic(model=config.anthropic_model)  # type: ignore[call-arg]
+        return ChatAnthropic(model=config.anthropic_model)
 
 
 async def _run_browser_agent(
