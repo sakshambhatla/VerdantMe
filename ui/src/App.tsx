@@ -1,9 +1,16 @@
+import { useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ResumeTab } from "@/components/ResumeTab";
 import { CompaniesTab } from "@/components/CompaniesTab";
 import { RolesTab } from "@/components/RolesTab";
+import { Footer } from "@/components/Footer";
+import { AboutModal } from "@/components/AboutModal";
+import { PreferencesModal } from "@/components/PreferencesModal";
 
 function App() {
+  const [showAbout, setShowAbout] = useState(false);
+  const [showPreferences, setShowPreferences] = useState(false);
+
   return (
     <div className="min-h-screen relative overflow-hidden" style={{ background: "var(--app-gradient)" }}>
       {/* Aurora background orbs */}
@@ -12,6 +19,10 @@ function App() {
         <div className="glass-orb glass-orb-2" />
         <div className="glass-orb glass-orb-3" />
       </div>
+
+      {/* Decorative vine — climbs up the right edge on load */}
+      {/* eslint-disable-next-line jsx-a11y/alt-text */}
+      <img src="/vine.png" alt="" aria-hidden="true" className="vine-overlay" />
 
       <Tabs defaultValue="resume">
         {/*
@@ -36,7 +47,7 @@ function App() {
               className="text-5xl font-black tracking-tight text-white leading-none"
               style={{ fontFamily: "var(--font-display)" }}
             >
-              Job Hunter
+              VerdantMe
             </h1>
             <p className="mt-2 text-sm" style={{ color: "rgba(255,255,255,0.50)" }}>
               Discover companies and roles matched to your resume
@@ -56,8 +67,8 @@ function App() {
           </div>
         </header>
 
-        {/* Page content */}
-        <main className="relative z-10 max-w-6xl mx-auto px-6 py-8">
+        {/* Page content — add bottom padding for sticky footer */}
+        <main className="relative z-10 max-w-6xl mx-auto px-6 py-8 pb-20">
           <TabsContent value="resume">
             <ResumeTab />
           </TabsContent>
@@ -69,6 +80,16 @@ function App() {
           </TabsContent>
         </main>
       </Tabs>
+
+      {/* Footer with About and Preferences modals */}
+      <Footer
+        showAbout={showAbout}
+        onAboutChange={setShowAbout}
+        showPreferences={showPreferences}
+        onPreferencesChange={setShowPreferences}
+      />
+      <AboutModal open={showAbout} onOpenChange={setShowAbout} />
+      <PreferencesModal open={showPreferences} onOpenChange={setShowPreferences} />
     </div>
   );
 }

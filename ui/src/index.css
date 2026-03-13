@@ -86,6 +86,21 @@ a:hover {
 .glass-orb-2 { width: 500px; height: 500px; top: 30vh;     right: -80px; background: #1d4ed8; }
 .glass-orb-3 { width: 420px; height: 420px; bottom: -60px; left: 35%;    background: #059669; }
 
+/* ─── Vine overlay ─── */
+.vine-overlay {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  height: 100vh;
+  width: auto;
+  max-width: 300px;
+  z-index: 5;            /* above orbs (z-0), below main content (z-10) */
+  pointer-events: none;
+  user-select: none;
+  object-fit: contain;
+  object-position: bottom right;
+}
+
 @theme inline {
   --font-sans: 'Geist Variable', sans-serif;
   --color-sidebar-ring: var(--sidebar-ring);
