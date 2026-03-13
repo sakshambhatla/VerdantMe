@@ -17,6 +17,10 @@ async def upload_resume(file: UploadFile) -> dict:
     if not file.filename or not file.filename.endswith(".txt"):
         raise HTTPException(status_code=400, detail="Only .txt resume files are supported.")
 
+    content = await file.read()
+    if len(content) > 512_000:
+        raise HTTPException(status_code=413, detail="Resume file too large. Maximum size is 500 KB.")
+
     config = load_config()
     resume_dir = config.resume_dir
     resume_dir.mkdir(parents=True, exist_ok=True)
@@ -27,7 +31,6 @@ async def upload_resume(file: UploadFile) -> dict:
 
     # Save the uploaded file
     dest = resume_dir / file.filename
-    content = await file.read()
     dest.write_bytes(content)
 
     # Parse in a thread (file I/O + regex, not CPU-heavy but keeps event loop free)

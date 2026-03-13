@@ -30,3 +30,7 @@ config.json
 # Frontend
 ui/node_modules/
 ui/dist/
+
+# Local-only files (never commit)
+local.patch
+security-concerns.md

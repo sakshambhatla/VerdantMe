@@ -54,8 +54,8 @@ write_preference      "overwrite"|"merge"  merge deduplicates + re-sorts; defaul
 rpm_limit             int                  client-side throttle; 0 = off; default 4
 
 # Browser agent (config.json only — not exposed in UI)
-browser_agent_max_time_minutes     int  default 7   hard wall; agent cancelled after N minutes
-browser_agent_max_steps            int  default 50  step budget for browser-use Agent.run
+browser_agent_max_time_minutes     int  default 15  hard wall; agent cancelled after N minutes
+browser_agent_max_steps            int  default 100 step budget for browser-use Agent.run
 browser_agent_rate_limit_max_retries   int  default 5  give up after N consecutive 429s
 browser_agent_rate_limit_initial_wait  int  default 5  initial back-off seconds; doubles each hit
 ```
@@ -84,3 +84,8 @@ source .venv/bin/activate && pytest tests/ -v --tb=short
 
 Test files: `tests/` (backend) · `ui/src/tests/` (frontend)
 Install test deps: `pip install -e ".[dev]"` · `pnpm --dir ui install`
+
+3. **Run security review** — use the `security-review` skill (triggers on: "run security review", "check for security issues", "security audit")
+   - Reviews changed files for secrets, PII, scraping legality, API vulnerabilities, and input validation
+   - Appends findings to `security-concerns.md` (gitignored — local only)
+   - Run before any commit that touches API routes, scraping logic, or config handling
