@@ -1,0 +1,26 @@
+[
+  {
+    "company_name": "Acme",
+    "title": "Software Engineer",
+    "location": "Remote",
+    "url": "https://acme.com/jobs/1",
+    "ats_type": "career_page",
+    "fetched_at": "2026-01-01T00:00:00Z"
+  },
+  {
+    "company_name": "Acme",
+    "title": "Data Scientist",
+    "location": "NYC",
+    "url": "https://acme.com/jobs/2",
+    "ats_type": "career_page",
+    "fetched_at": "2026-01-01T00:00:00Z"
+  },
+  {
+    "company_name": "Acme",
+    "title": "Product Manager",
+    "location": "SF",
+    "url": "https://acme.com/jobs/3",
+    "ats_type": "career_page",
+    "fetched_at": "2026-01-01T00:00:00Z"
+  }
+]
