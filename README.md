@@ -38,6 +38,8 @@ The easiest way to use VerdantME is through the browser UI at `http://localhost:
 
 Three tabs let you upload a resume, discover companies, and discover/filter roles — all without touching the terminal again.
 
+![Discover Companies](setup/verdantMe-discover-companies-25p.gif)
+
 ---
 
 ## CLI Usage
