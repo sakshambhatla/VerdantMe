@@ -1,7 +1,9 @@
-# JobFinder
+# VerdantME
 
-A Python CLI that reads your resumes, uses an LLM to discover relevant companies,
+Reads your resumes, uses an LLM to discover relevant companies,
 and reads open job roles from those companies' career pages via public ATS APIs.
+
+Available both as UI and CLI
 
 ## Setup
 
