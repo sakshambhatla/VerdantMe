@@ -195,3 +195,9 @@ header [role="tab"][data-state="active"] {
   border-bottom: 2px solid rgba(255, 255, 255, 0.80);
   box-shadow: none;
 }
+
+/* Compact mode: tablist shrinks to content width so the logo fits on the left */
+header.compact [role="tablist"] {
+  width: auto;
+  justify-content: flex-start;
+}

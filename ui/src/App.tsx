@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ResumeTab } from "@/components/ResumeTab";
 import { CompaniesTab } from "@/components/CompaniesTab";
@@ -10,6 +10,13 @@ import { PreferencesModal } from "@/components/PreferencesModal";
 function App() {
   const [showAbout, setShowAbout] = useState(false);
   const [showPreferences, setShowPreferences] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
+
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 60);
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
 
   return (
     <div className="min-h-screen relative overflow-hidden" style={{ background: "var(--app-gradient)" }}>
@@ -31,39 +38,65 @@ function App() {
           offset without any hardcoded pixel arithmetic.
         */}
         <header
-          className="sticky top-0 z-20"
+          className={`sticky top-0 z-20${scrolled ? " compact" : ""}`}
           style={{
             background: "var(--glass-header-bg)",
             backdropFilter: "blur(20px)",
             WebkitBackdropFilter: "blur(20px)",
           }}
         >
-          {/* Title section */}
+          {/* Title block — collapses when scrolled */}
           <div
-            className="py-7 text-center border-b"
-            style={{ borderColor: "var(--glass-border)" }}
+            className="overflow-hidden"
+            style={{
+              borderBottom: scrolled ? "none" : `1px solid var(--glass-border)`,
+              maxHeight: scrolled ? "0px" : "160px",
+              opacity: scrolled ? 0 : 1,
+              transition: "max-height 0.3s ease-in-out, opacity 0.25s ease-in-out",
+            }}
           >
-            <h1
-              className="text-5xl font-black tracking-tight text-white leading-none"
-              style={{ fontFamily: "var(--font-display)" }}
-            >
-              VerdantMe
-            </h1>
-            <p className="mt-2 text-sm" style={{ color: "rgba(255,255,255,0.50)" }}>
-              Discover companies and roles matched to your resume
-            </p>
+            <div className="py-7 text-center">
+              <h1
+                className="text-5xl font-black tracking-tight text-white leading-none"
+                style={{ fontFamily: "var(--font-display)" }}
+              >
+                VerdantMe
+              </h1>
+              <p className="mt-2 text-sm" style={{ color: "rgba(255,255,255,0.50)" }}>
+                Discover companies and roles matched to your resume
+              </p>
+            </div>
           </div>
 
-          {/* Full-width tab navigation band */}
+          {/* Tab band — always visible; layout shifts when scrolled */}
           <div
             className="border-b"
             style={{ borderColor: "var(--glass-border)" }}
           >
-            <TabsList className="justify-center">
-              <TabsTrigger value="resume">📄 Upload Resume</TabsTrigger>
-              <TabsTrigger value="companies">🏢 Discover Companies</TabsTrigger>
-              <TabsTrigger value="roles">💼 Discover Roles</TabsTrigger>
-            </TabsList>
+            <div className={`flex items-center${scrolled ? " px-6" : " justify-center"}`}>
+              {/* Compact logo — slides in on the left when scrolled */}
+              <span
+                className="font-black text-white"
+                style={{
+                  fontFamily: "var(--font-display)",
+                  fontSize: "1.25rem",
+                  opacity: scrolled ? 1 : 0,
+                  maxWidth: scrolled ? "200px" : "0px",
+                  overflow: "hidden",
+                  whiteSpace: "nowrap",
+                  marginRight: scrolled ? "1rem" : "0",
+                  transition: "opacity 0.3s ease-in-out, max-width 0.3s ease-in-out, margin-right 0.3s ease-in-out",
+                }}
+              >
+                VerdantMe
+              </span>
+
+              <TabsList className={scrolled ? "" : "justify-center"}>
+                <TabsTrigger value="resume">📄 Upload Resume</TabsTrigger>
+                <TabsTrigger value="companies">🏢 Discover Companies</TabsTrigger>
+                <TabsTrigger value="roles">💼 Discover Roles</TabsTrigger>
+              </TabsList>
+            </div>
           </div>
         </header>
 
