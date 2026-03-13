@@ -231,9 +231,10 @@ def _build_browser_llm(config: AppConfig):
             api_key=os.environ.get("GEMINI_API_KEY"),
         )
     else:
+        import os
         from browser_use.llm.anthropic.chat import ChatAnthropic  # type: ignore
 
-        return ChatAnthropic(model=config.anthropic_model)
+        return ChatAnthropic(model=config.anthropic_model, api_key=os.environ.get("ANTHROPIC_API_KEY"))
 
 
 # ── Task prompt builder ──────────────────────────────────────────────────────
