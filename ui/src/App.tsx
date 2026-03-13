@@ -38,6 +38,7 @@ function App() {
     const spacer = spacerRef.current;
     if (!header || !spacer) return;
 
+    spacer.style.height = header.offsetHeight + "px";
     const ro = new ResizeObserver(() => {
       spacer.style.height = header.offsetHeight + "px";
     });
@@ -80,7 +81,7 @@ function App() {
         */}
         <header
           ref={headerRef}
-          className={`fixed top-0 left-0 right-0 z-20${scrolled ? " compact" : ""}`}
+          className={`fixed top-0 left-0 right-0 z-50${scrolled ? " compact" : ""}`}
           style={{
             background: "var(--glass-header-bg)",
             backdropFilter: "blur(20px)",
