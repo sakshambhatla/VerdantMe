@@ -120,3 +120,12 @@ Place plain text (`.txt`) resume files in `resumes/`. Multiple files are support
 | LinkedIn | Flagged for manual check |
 
 Companies using unsupported ATS types are surfaced with their career page URL. A **browser-use agent** is available for interactive pages — see [setup/README.md](setup/README.md).
+
+> **⚠️ Browser Agent requires API credits — subscriptions are not sufficient**
+>
+> The browser-use agent calls your configured LLM provider's API directly and is billed by token usage:
+>
+> - **Anthropic** — requires a separate API key with a paid credit balance ([console.anthropic.com](https://console.anthropic.com)). A Claude Pro or Max subscription alone does **not** cover API usage.
+> - **Gemini** — has a free tier, but heavy browser-agent usage may exceed it. Beyond the free tier, billing is pay-per-token via a Google Cloud billing account ([aistudio.google.com](https://aistudio.google.com)). A Gemini Advanced subscription does **not** cover API usage.
+>
+> Standard company discovery and role fetching are unaffected and work within the free tier for most usage.
