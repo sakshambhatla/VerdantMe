@@ -9,6 +9,7 @@ from jobfinder.storage.registry import update_registry_searchable
 from jobfinder.storage.schemas import DiscoveredCompany, DiscoveredRole, FlaggedCompany
 from jobfinder.storage.store import StorageManager
 from jobfinder.utils.display import console, display_warning
+from jobfinder.utils.log_stream import log
 
 
 def discover_roles(
@@ -35,7 +36,7 @@ def discover_roles(
 
     # ── Pass 1: ATS API fetch ────────────────────────────────────────────────
     n_companies = len(companies)
-    console.print(
+    log(
         f"\n[bold]Pass 1 — ATS API[/bold] "
         f"({n_companies} {'company' if n_companies == 1 else 'companies'}): "
         f"fetching structured job feeds..."
@@ -47,7 +48,7 @@ def discover_roles(
             if cached is not None:
                 all_roles.extend(cached)
                 age = cache.age_hours(company.name, company.ats_type) or 0
-                console.print(
+                log(
                     f"  [dim]{company.name}[/dim]: "
                     f"{len(cached)} roles (cached {age:.0f}h ago)"
                 )
@@ -60,9 +61,10 @@ def discover_roles(
                 roles = fetcher.fetch(company, config.request_timeout)
                 all_roles.extend(roles)
                 cache.put(company.name, company.ats_type, roles)
-                console.print(
+                log(
                     f"  [green]✓ {company.name}[/green]: {len(roles)} roles "
-                    f"via [cyan]{company.ats_type.upper()}[/cyan] API"
+                    f"via [cyan]{company.ats_type.upper()}[/cyan] API",
+                    level="success",
                 )
             except UnsupportedATSError:
                 flagged.append(
@@ -100,7 +102,7 @@ def discover_roles(
 
     # ── Pass 1 summary ───────────────────────────────────────────────────────
     _n_flagged = len(flagged)
-    console.print(
+    log(
         f"  [dim]Pass 1 complete: {len(all_roles)} roles fetched"
         + (f" · {_n_flagged} {'company' if _n_flagged == 1 else 'companies'} "
            f"had no public API (will try career page)" if _n_flagged else "")
@@ -110,7 +112,7 @@ def discover_roles(
     # ── Pass 2: career page supplemental fetch ───────────────────────────────
     _has_career_pages = any(c.career_page_url for c in companies)
     if _has_career_pages:
-        console.print(
+        log(
             "\n[bold]Pass 2 — Career page supplement[/bold]: "
             "rendering pages with Playwright and extracting roles with LLM..."
         )
@@ -120,7 +122,7 @@ def discover_roles(
     for company in companies:
         if not company.career_page_url:
             if company.name.lower() in flagged_names:
-                console.print(
+                log(
                     f"  [dim]{company.name}: no career page URL configured — "
                     f"skipping (use browser agent to fetch)[/dim]"
                 )
@@ -128,8 +130,9 @@ def discover_roles(
 
         is_fallback = company.name.lower() in flagged_names
         if is_fallback:
-            console.print(
-                f"  [yellow]↳ ATS failed — trying career page for {company.name}...[/yellow]"
+            log(
+                f"  [yellow]↳ ATS failed — trying career page for {company.name}...[/yellow]",
+                level="warning",
             )
 
         # Cache check for career page
@@ -141,7 +144,7 @@ def discover_roles(
                     all_roles.extend(new_roles)
                     existing_urls.update(r.url for r in new_roles if r.url)
                 age = cache.age_hours(company.name, "career_page") or 0
-                console.print(
+                log(
                     f"  [dim]{company.name} (career_page)[/dim]: "
                     f"{len(cached_cp)} roles (cached {age:.0f}h ago)"
                 )
@@ -168,14 +171,16 @@ def discover_roles(
                 if is_fallback and cp_roles:
                     flagged = [f for f in flagged if f.name.lower() != company.name.lower()]
                     flagged_names.discard(company.name.lower())
-                    console.print(
+                    log(
                         f"  [green]✓ {company.name}[/green]: rescued via career page "
-                        f"({len(cp_roles)} roles, {len(new_roles)} new)"
+                        f"({len(cp_roles)} roles, {len(new_roles)} new)",
+                        level="success",
                     )
                 elif new_roles:
-                    console.print(
+                    log(
                         f"  [green]✓ {company.name}[/green]: "
-                        f"{len(new_roles)} additional roles via career page"
+                        f"{len(new_roles)} additional roles via career page",
+                        level="success",
                     )
                 elif is_fallback and not cp_roles:
                     display_warning(
@@ -184,7 +189,7 @@ def discover_roles(
                     )
                 else:
                     # ATS succeeded and career page added nothing new — clarify impact
-                    console.print(
+                    log(
                         f"  [dim]{company.name}: career page check found no new roles "
                         f"(ATS feed appears complete)[/dim]"
                     )
@@ -202,18 +207,18 @@ def discover_roles(
     # ── Fetch summary ────────────────────────────────────────────────────────
     n_unique_cos = len({r.company_name for r in all_roles})
     n_final_flagged = len(flagged)
-    console.print(
+    log(
         f"\n[bold]Fetch complete[/bold]: {len(all_roles)} roles"
         + (f" across {n_unique_cos} companies" if n_unique_cos != n_companies else "")
         + (f" · [yellow]{n_final_flagged} flagged[/yellow]" if n_final_flagged else "")
     )
     if n_final_flagged:
         flagged_names_str = ", ".join(f.name for f in flagged)
-        console.print(
+        log(
             f"  [dim]Flagged ({flagged_names_str}): no public ATS API and no static "
             f"career page content found.[/dim]"
         )
-        console.print(
+        log(
             f"  [dim]→ Note: 'Fetch via Browser Agent' is a separate explicit action "
             f"(not part of this pipeline) — use it in the UI for flagged companies.[/dim]"
         )

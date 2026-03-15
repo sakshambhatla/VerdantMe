@@ -60,12 +60,18 @@ def display_flagged(flagged: list[dict]) -> None:
 
 
 def display_warning(message: str) -> None:
-    console.print(f"[yellow]WARNING:[/yellow] {message}")
+    from jobfinder.utils.log_stream import log
+
+    log(f"[yellow]WARNING:[/yellow] {message}", level="warning")
 
 
 def display_error(message: str) -> None:
-    console.print(f"[red]ERROR:[/red] {message}")
+    from jobfinder.utils.log_stream import log
+
+    log(f"[red]ERROR:[/red] {message}", level="error")
 
 
 def display_success(message: str) -> None:
-    console.print(f"[green]SUCCESS:[/green] {message}")
+    from jobfinder.utils.log_stream import log
+
+    log(f"[green]SUCCESS:[/green] {message}", level="success")

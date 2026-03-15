@@ -3,6 +3,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ResumeTab } from "@/components/ResumeTab";
 import { CompaniesTab } from "@/components/CompaniesTab";
 import { RolesTab } from "@/components/RolesTab";
+import { DebugLogPanel } from "@/components/DebugLogPanel";
 import { Footer } from "@/components/Footer";
 import { AboutModal } from "@/components/AboutModal";
 import { PreferencesModal } from "@/components/PreferencesModal";
@@ -161,6 +162,7 @@ function App() {
           <TabsContent value="roles">
             <RolesTab />
           </TabsContent>
+          <DebugLogPanel />
         </main>
       </Tabs>
 

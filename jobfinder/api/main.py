@@ -7,10 +7,11 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from jobfinder.api.routes import companies, resume, roles
+from jobfinder.api.routes import companies, logs, resume, roles
 from jobfinder.config import load_config
 from jobfinder.storage.registry import REGISTRY_FILENAME, load_or_bootstrap_registry
 from jobfinder.storage.store import StorageManager
+from jobfinder.utils.log_stream import init_log_stream
 
 
 def reload_registry(app: FastAPI) -> None:
@@ -27,6 +28,7 @@ async def lifespan(app: FastAPI):
     app.state.registry = load_or_bootstrap_registry(store)
     # Keyed by company name; holds AgentSession objects for running browser agents
     app.state.running_agents: dict[str, object] = {}
+    init_log_stream(config.data_dir)
     yield
 
 
@@ -43,6 +45,7 @@ app.add_middleware(
 app.include_router(resume.router, prefix="/api")
 app.include_router(companies.router, prefix="/api")
 app.include_router(roles.router, prefix="/api")
+app.include_router(logs.router, prefix="/api")
 
 # Serve the built React app in production (ui/dist must exist)
 _ui_dist = Path(__file__).parent.parent.parent / "ui" / "dist"

@@ -27,10 +27,11 @@ class RateLimiter:
         if len(self._timestamps) >= self.rpm:
             wait_secs = (self._timestamps[0] + window) - now
             if wait_secs > 0:
-                from jobfinder.utils.display import console
-                console.print(
+                from jobfinder.utils.log_stream import log
+                log(
                     f"  [yellow]Rate limit ({self.rpm} RPM): "
-                    f"waiting {math.ceil(wait_secs)}s...[/yellow]"
+                    f"waiting {math.ceil(wait_secs)}s...[/yellow]",
+                    level="warning",
                 )
                 time.sleep(wait_secs)
             # Evict again after sleeping

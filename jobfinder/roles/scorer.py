@@ -9,6 +9,7 @@ from jobfinder.roles.checkpoint import Checkpoint
 from jobfinder.roles.errors import RateLimitError
 from jobfinder.storage.schemas import DiscoveredRole
 from jobfinder.utils.display import console
+from jobfinder.utils.log_stream import log
 
 BATCH_SIZE = 60
 
@@ -152,11 +153,11 @@ def score_roles(
     total_batches = (len(roles) + BATCH_SIZE - 1) // BATCH_SIZE
 
     if resume_batches > 0:
-        console.print(
+        log(
             f"\nResuming scoring from batch {resume_batches + 1}/{total_batches}..."
         )
     else:
-        console.print(f"\nScoring [bold]{len(roles)}[/bold] roles for relevance...")
+        log(f"\nScoring [bold]{len(roles)}[/bold] roles for relevance...")
 
     start_offset = resume_batches * BATCH_SIZE
 

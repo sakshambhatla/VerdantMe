@@ -32,7 +32,7 @@ def discover_companies(
     names as exclusions so the model doesn't repeat them. Stops early when
     the model returns no new companies or max_companies is reached.
     """
-    from jobfinder.utils.display import console
+    from jobfinder.utils.log_stream import log
 
     num_batches = min(_MAX_BATCHES, math.ceil(config.max_companies / _BATCH_SIZE))
 
@@ -48,7 +48,7 @@ def discover_companies(
         exclude = list(seen_names)
 
         if num_batches > 1:
-            console.print(
+            log(
                 f"  [dim]Batch {batch_num + 1}/{num_batches} "
                 f"(requesting {batch_size}, {len(all_companies)} found so far)[/dim]"
             )
@@ -72,7 +72,7 @@ def discover_companies(
         new = [c for c in batch if c.name.lower() not in seen_names]
 
         if not new:
-            console.print(
+            log(
                 f"  [dim]No new companies in batch {batch_num + 1} — stopping early[/dim]"
             )
             break
@@ -143,7 +143,7 @@ def _call_gemini(
     from google.genai import types
     from google.genai.errors import ClientError
 
-    from jobfinder.utils.display import console
+    from jobfinder.utils.log_stream import log as _log
 
     client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
     if seed_companies:
@@ -171,12 +171,14 @@ def _call_gemini(
         if getattr(exc, "code", None) == 429:
             from jobfinder.utils.gemini_errors import log_gemini_429
 
+            from jobfinder.utils.display import console
             summary, is_daily, retry_wait = log_gemini_429(
                 exc, config.gemini_model, config.debug, console
             )
             if not is_daily and _attempt < 3:
-                console.print(
-                    f"[yellow]  Retrying in {retry_wait}s ({_attempt + 1}/3)...[/yellow]"
+                _log(
+                    f"[yellow]  Retrying in {retry_wait}s ({_attempt + 1}/3)...[/yellow]",
+                    level="warning",
                 )
                 time.sleep(retry_wait)
                 return _call_gemini(
@@ -225,22 +227,24 @@ def _validate_companies(companies: list[DiscoveredCompany], timeout: int = 10) -
     Also auto-detects ATS for companies with ats_type == 'unknown' or missing board token
     by probing Greenhouse → Lever → Ashby with a slug derived from the company name.
     """
-    from jobfinder.utils.display import console
+    from jobfinder.utils.log_stream import log
 
     for c in companies:
         if c.career_page_url:
             if not head_ok(c.career_page_url, timeout=timeout):
-                console.print(
-                    f"  [yellow]⚠[/yellow] {c.name}: career_page_url unreachable — cleared"
+                log(
+                    f"  [yellow]⚠[/yellow] {c.name}: career_page_url unreachable — cleared",
+                    level="warning",
                 )
                 c.career_page_url = ""
 
         if c.ats_type in _ATS_CHECK_URLS and c.ats_board_token:
             check_url = _ATS_CHECK_URLS[c.ats_type].format(token=c.ats_board_token)
             if not head_ok(check_url, timeout=timeout):
-                console.print(
+                log(
                     f"  [yellow]⚠[/yellow] {c.name}: ats_board_token "
-                    f"'{c.ats_board_token}' not found on {c.ats_type} — cleared"
+                    f"'{c.ats_board_token}' not found on {c.ats_type} — cleared",
+                    level="warning",
                 )
                 c.ats_board_token = None
 
@@ -253,14 +257,15 @@ def _validate_companies(companies: list[DiscoveredCompany], timeout: int = 10) -
                 if head_ok(probe_url, timeout=timeout):
                     c.ats_type = ats_name
                     c.ats_board_token = slug
-                    console.print(
+                    log(
                         f"  [green]✓[/green] {c.name}: auto-detected as {ats_name} "
-                        f"(token: {slug!r})"
+                        f"(token: {slug!r})",
+                        level="success",
                     )
                     detected = True
                     break
             if not detected and c.ats_type == "unknown":
-                console.print(
+                log(
                     f"  [dim]{c.name}: ATS not auto-detected — will try career page[/dim]"
                 )
 

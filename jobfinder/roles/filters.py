@@ -9,6 +9,7 @@ from jobfinder.roles.checkpoint import Checkpoint
 from jobfinder.roles.errors import RateLimitError
 from jobfinder.storage.schemas import DiscoveredRole
 from jobfinder.utils.display import console
+from jobfinder.utils.log_stream import log
 
 BATCH_SIZE = 100
 
@@ -186,12 +187,12 @@ def filter_roles(
     matched: list[DiscoveredRole] = list(resume_kept or [])
 
     if resume_batches > 0:
-        console.print(
+        log(
             f"\nResuming filter from batch {resume_batches + 1}/{total_batches} "
             f"({len(matched)} roles matched so far)..."
         )
     else:
-        console.print(
+        log(
             f"\n[bold]→ LLM Filter[/bold]: {len(roles)} roles · "
             f"criteria: {filter_desc}"
         )

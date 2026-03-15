@@ -8,6 +8,16 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import App from "@/App";
 
+// ── Mock EventSource (not available in jsdom) ────────────────────────────────
+
+class MockEventSource {
+  onopen: (() => void) | null = null;
+  onerror: (() => void) | null = null;
+  addEventListener = vi.fn();
+  close = vi.fn();
+}
+vi.stubGlobal("EventSource", vi.fn(() => new MockEventSource()));
+
 // ── Mock the entire API module ────────────────────────────────────────────────
 
 vi.mock("@/lib/api", () => ({
