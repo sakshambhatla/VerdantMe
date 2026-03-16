@@ -1,6 +1,31 @@
 import axios from "axios";
+import { supabase } from "@/lib/supabase";
 
 const api = axios.create({ baseURL: "/api" });
+
+// Attach Supabase JWT to every request when in managed mode
+api.interceptors.request.use(async (config) => {
+  const mode = localStorage.getItem("verdantme-mode");
+  if (supabase && mode === "managed") {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.access_token) {
+      config.headers.Authorization = `Bearer ${session.access_token}`;
+    }
+  }
+  return config;
+});
+
+// Redirect to login on 401 (expired/invalid token) — only in managed mode
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    const mode = localStorage.getItem("verdantme-mode");
+    if (error.response?.status === 401 && supabase && mode === "managed") {
+      supabase.auth.signOut();
+    }
+    return Promise.reject(error);
+  },
+);
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -239,13 +264,28 @@ export interface BrowserAgentErrorEvent {
  *   for the company (e.g. Workday companies). The backend will use this URL
  *   instead of the one in the registry.
  */
-export function browserAgentStreamUrl(
+/**
+ * Build the SSE URL for a company's browser-agent stream.
+ * Pass this to `new EventSource(url)` — do NOT use axios for SSE.
+ *
+ * When Supabase auth is configured, the JWT is appended as a query param
+ * because EventSource doesn't support custom headers.
+ */
+export async function browserAgentStreamUrl(
   company_name: string,
   careerPageUrlOverride?: string,
-): string {
+): Promise<string> {
   let url = `/api/roles/fetch-browser/stream?company_name=${encodeURIComponent(company_name)}`;
   if (careerPageUrlOverride) {
     url += `&career_page_url_override=${encodeURIComponent(careerPageUrlOverride)}`;
+  }
+  // EventSource doesn't support custom headers — append JWT as query param (managed mode only)
+  const mode = localStorage.getItem("verdantme-mode");
+  if (supabase && mode === "managed") {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.access_token) {
+      url += `&token=${encodeURIComponent(session.access_token)}`;
+    }
   }
   return url;
 }

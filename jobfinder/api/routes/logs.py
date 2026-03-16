@@ -4,16 +4,20 @@ from __future__ import annotations
 import asyncio
 import json
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 from sse_starlette.sse import EventSourceResponse
 
+from jobfinder.api.auth import get_current_user
 from jobfinder.utils.log_stream import get_current_seq, get_logs_since
 
 router = APIRouter()
 
 
 @router.get("/logs/stream")
-async def stream_logs(request: Request):
+async def stream_logs(
+    request: Request,
+    user_id: str | None = Depends(get_current_user),
+):
     """Stream log entries as SSE events.
 
     Each event has type ``"log"`` with JSON payload::

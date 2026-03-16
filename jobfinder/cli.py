@@ -228,7 +228,7 @@ def discover_roles_cmd(
 
     config = load_config(ctx.obj["config_path"])
     store = StorageManager(config.data_dir)
-    cp = Checkpoint(store.data_dir / CHECKPOINT_FILENAME)
+    cp = Checkpoint(store)
 
     from jobfinder.storage.registry import REGISTRY_FILENAME, load_or_bootstrap_registry
 
@@ -301,7 +301,7 @@ def discover_roles_cmd(
 
         # --refresh overrides --use-cache: a fresh fetch always wins
         effective_use_cache = use_cache and not (refresh or config.refresh)
-        roles, flagged = discover_roles(companies, config, use_cache=effective_use_cache)
+        roles, flagged = discover_roles(companies, config, store=store, use_cache=effective_use_cache)
         flagged_dicts = [f.model_dump() for f in flagged]
 
         # Save checkpoint after successful ATS fetch

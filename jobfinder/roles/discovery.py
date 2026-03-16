@@ -8,9 +8,9 @@ from jobfinder.roles.ats import get_fetcher
 from jobfinder.roles.ats.base import ATSFetchError, UnsupportedATSError
 from jobfinder.roles.ats.career_page import fetch_career_page_roles
 from jobfinder.roles.cache import RolesCache
+from jobfinder.storage.backend import StorageBackend
 from jobfinder.storage.registry import update_registry_searchable
 from jobfinder.storage.schemas import DiscoveredCompany, DiscoveredRole, FlaggedCompany
-from jobfinder.storage.store import StorageManager
 from jobfinder.utils.display import console, display_warning
 from jobfinder.utils.log_stream import log
 
@@ -21,6 +21,8 @@ if TYPE_CHECKING:
 def discover_roles(
     companies: list[DiscoveredCompany],
     config: AppConfig,
+    *,
+    store: StorageBackend,
     use_cache: bool = False,
     on_progress: ProgressCallback | None = None,
 ) -> tuple[list[DiscoveredRole], list[FlaggedCompany]]:
@@ -38,7 +40,6 @@ def discover_roles(
     all_roles: list[DiscoveredRole] = []
     flagged: list[FlaggedCompany] = []
 
-    store = StorageManager(config.data_dir)
     cache = RolesCache(store)
 
     # ── Pass 1: ATS API fetch ────────────────────────────────────────────────

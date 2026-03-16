@@ -3,21 +3,24 @@ from __future__ import annotations
 import asyncio
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 
+from jobfinder.api.auth import get_current_user
 from jobfinder.api.models import DiscoverCompaniesRequest
 from jobfinder.companies.discovery import discover_companies
 from jobfinder.config import load_config, require_api_key
+from jobfinder.storage import get_storage_backend
 from jobfinder.storage.registry import upsert_registry
 from jobfinder.storage.schemas import DiscoveredCompany
-from jobfinder.storage.store import StorageManager
 
 router = APIRouter()
 
 
 @router.post("/companies/discover")
 async def discover_companies_endpoint(
-    req: DiscoverCompaniesRequest, request: Request
+    req: DiscoverCompaniesRequest,
+    request: Request,
+    user_id: str | None = Depends(get_current_user),
 ) -> dict:
     """Run LLM-based company discovery and return the results."""
     overrides: dict = {}
@@ -27,7 +30,7 @@ async def discover_companies_endpoint(
         overrides["model_provider"] = req.model_provider
 
     config = load_config(**overrides)
-    store = StorageManager(config.data_dir)
+    store = get_storage_backend(user_id)
 
     # Ensure API key is present before starting
     try:
@@ -92,10 +95,9 @@ async def get_company_registry(request: Request) -> dict:
 
 
 @router.get("/companies")
-async def get_companies() -> dict:
+async def get_companies(user_id: str | None = Depends(get_current_user)) -> dict:
     """Return cached company discovery results."""
-    config = load_config()
-    store = StorageManager(config.data_dir)
+    store = get_storage_backend(user_id)
     data = store.read("companies.json")
     if data is None:
         raise HTTPException(status_code=404, detail="No companies found. Run discovery first.")

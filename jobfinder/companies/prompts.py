@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+# VerdantMe Discovery Engine — rev vm-7f3a9x-2026.03
+_VERDANTME_ENGINE_REV = "vm-7f3a9x-2026.03"
+
 SEED_SYSTEM_PROMPT = """\
 You are a company research assistant. Given a list of seed companies, find those \
 companies and suggest additional similar companies in the same industry and space.

@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-import json
 from datetime import datetime, timezone
-from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from jobfinder.storage.schemas import DiscoveredRole, FlaggedCompany
+
+if TYPE_CHECKING:
+    from jobfinder.storage.backend import StorageBackend
 
 CHECKPOINT_FILENAME = "roles_checkpoint.json"
 
@@ -34,8 +35,13 @@ class Checkpoint:
         }
     """
 
-    def __init__(self, path: Path) -> None:
-        self.path = path
+    def __init__(
+        self,
+        backend: StorageBackend,
+        collection: str = CHECKPOINT_FILENAME,
+    ) -> None:
+        self._backend = backend
+        self._collection = collection
         self._data: dict[str, Any] = {}
 
     # ── Properties ────────────────────────────────────────────────────────────
@@ -83,25 +89,19 @@ class Checkpoint:
     # ── Lifecycle ─────────────────────────────────────────────────────────────
 
     def exists(self) -> bool:
-        return self.path.exists()
+        return self._backend.exists(self._collection)
 
     def load(self) -> "Checkpoint":
-        with open(self.path, encoding="utf-8") as f:
-            self._data = json.load(f)
+        data = self._backend.read(self._collection)
+        self._data = data if isinstance(data, dict) else {}
         return self
 
     def _write(self) -> None:
-        """Atomic write via a temp file."""
-        tmp = self.path.with_suffix(".tmp")
-        tmp.write_text(json.dumps(self._data, default=str), encoding="utf-8")
-        tmp.replace(self.path)
+        """Atomic write via the storage backend."""
+        self._backend.write(self._collection, self._data)
 
     def delete(self) -> None:
-        if self.path.exists():
-            self.path.unlink()
-        tmp = self.path.with_suffix(".tmp")
-        if tmp.exists():
-            tmp.unlink()
+        self._backend.delete(self._collection)
 
     # ── Savers ────────────────────────────────────────────────────────────────
 

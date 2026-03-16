@@ -50,10 +50,11 @@ def client(tmp_data_dir: Path):
     Overrides ``load_config`` so the app reads/writes to ``tmp_data_dir``
     rather than the real data/ directory.
     """
-    import jobfinder.api.routes.resume as resume_mod
-    import jobfinder.api.routes.companies as companies_mod
-    import jobfinder.api.routes.roles as roles_mod
+    import jobfinder.api.routes.resume
+    import jobfinder.api.routes.companies
+    import jobfinder.api.routes.roles
     from jobfinder.config import AppConfig
+    from jobfinder.storage.store import StorageManager
     from jobfinder.api.main import app
 
     cfg = AppConfig(
@@ -62,24 +63,26 @@ def client(tmp_data_dir: Path):
         model_provider="anthropic",
         rpm_limit=0,
     )
-
-    # Patch load_config everywhere the routes call it
-    import jobfinder.api.routes.resume
-    import jobfinder.api.routes.companies
-    import jobfinder.api.routes.roles
-
-    original_fns = {}
+    test_store = StorageManager(tmp_data_dir)
 
     def _patched_load_config(*a, **kw):
         return cfg
 
-    for mod in (
+    def _patched_get_storage_backend(user_id=None):
+        return test_store
+
+    # Patch load_config and get_storage_backend everywhere the routes call them
+    originals: dict = {}
+    route_modules = (
         jobfinder.api.routes.resume,
         jobfinder.api.routes.companies,
         jobfinder.api.routes.roles,
-    ):
-        original_fns[mod] = mod.load_config
+    )
+    for mod in route_modules:
+        originals[(mod, "load_config")] = getattr(mod, "load_config", None)
         mod.load_config = _patched_load_config
+        originals[(mod, "get_storage_backend")] = getattr(mod, "get_storage_backend", None)
+        mod.get_storage_backend = _patched_get_storage_backend
 
     with TestClient(app) as c:
         # Seed app state
@@ -88,8 +91,9 @@ def client(tmp_data_dir: Path):
         yield c
 
     # Restore originals
-    for mod, fn in original_fns.items():
-        mod.load_config = fn
+    for (mod, attr), fn in originals.items():
+        if fn is not None:
+            setattr(mod, attr, fn)
 
 
 # ── ATS fixture helpers ────────────────────────────────────────────────────────

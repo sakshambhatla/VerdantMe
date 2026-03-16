@@ -3,21 +3,23 @@ from __future__ import annotations
 import asyncio
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 
+from jobfinder.api.auth import get_current_user
 from jobfinder.api.models import DiscoverRolesRequest, FetchBrowserRolesRequest
 from jobfinder.config import AppConfig, RoleFilters, load_config, require_api_key
-from jobfinder.roles.checkpoint import CHECKPOINT_FILENAME, Checkpoint
+from jobfinder.roles.checkpoint import Checkpoint
 from jobfinder.roles.discovery import discover_roles
 from jobfinder.roles.errors import RateLimitError
+from jobfinder.storage import get_storage_backend
+from jobfinder.storage.backend import StorageBackend
 from jobfinder.storage.schemas import DiscoveredCompany, DiscoveredRole
-from jobfinder.storage.store import StorageManager
 
 router = APIRouter()
 
 
-def _make_checkpoint(store: StorageManager) -> Checkpoint:
-    return Checkpoint(store.data_dir / CHECKPOINT_FILENAME)
+def _make_checkpoint(store: StorageBackend) -> Checkpoint:
+    return Checkpoint(store)
 
 
 # ── Browser-agent shared helpers ──────────────────────────────────────────────
@@ -49,7 +51,7 @@ def _to_roles(
 
 def _merge_to_file(
     role_dicts: list[dict],
-    store: StorageManager,
+    store: StorageBackend,
     existing_data: dict | None = None,
 ) -> None:
     """Upsert *role_dicts* into roles.json (dedup by URL, sort by score)."""
@@ -70,7 +72,7 @@ def _merge_to_file(
 async def _score_browser_roles(
     company_name: str,
     config: AppConfig,
-    store: StorageManager,
+    store: StorageBackend,
 ) -> int:
     """Score all stored roles for *company_name*.  Returns count of scored roles."""
     if not config.relevance_score_criteria:
@@ -95,7 +97,11 @@ async def _score_browser_roles(
 
 
 @router.post("/roles/discover")
-async def discover_roles_endpoint(req: DiscoverRolesRequest, request: Request) -> dict:
+async def discover_roles_endpoint(
+    req: DiscoverRolesRequest,
+    request: Request,
+    user_id: str | None = Depends(get_current_user),
+) -> dict:
     """Fetch open roles from ATS APIs, then apply filters and scoring.
 
     Set ``resume=true`` to continue a previous run that was interrupted by a
@@ -114,7 +120,7 @@ async def discover_roles_endpoint(req: DiscoverRolesRequest, request: Request) -
         overrides["role_filters"] = req.role_filters.model_dump()
 
     config = load_config(**overrides)
-    store = StorageManager(config.data_dir)
+    store = get_storage_backend(user_id)
     cp = _make_checkpoint(store)
 
     companies_data = store.read("companies.json")
@@ -189,7 +195,8 @@ async def discover_roles_endpoint(req: DiscoverRolesRequest, request: Request) -
 
         try:
             roles, flagged = await asyncio.to_thread(
-                discover_roles, companies, config, effective_use_cache, _on_progress
+                discover_roles, companies, config,
+                store=store, use_cache=effective_use_cache, on_progress=_on_progress,
             )
         except Exception as exc:
             raise HTTPException(
@@ -303,10 +310,9 @@ async def discover_roles_endpoint(req: DiscoverRolesRequest, request: Request) -
 
 
 @router.get("/roles/unfiltered")
-async def get_unfiltered_roles() -> dict:
+async def get_unfiltered_roles(user_id: str | None = Depends(get_current_user)) -> dict:
     """Return raw/unfiltered role discovery results."""
-    config = load_config()
-    store = StorageManager(config.data_dir)
+    store = get_storage_backend(user_id)
     data = store.read("roles_unfiltered.json")
     if data is None:
         raise HTTPException(status_code=404, detail="No unfiltered roles found.")
@@ -314,10 +320,9 @@ async def get_unfiltered_roles() -> dict:
 
 
 @router.get("/roles/checkpoint")
-async def get_roles_checkpoint() -> dict:
+async def get_roles_checkpoint(user_id: str | None = Depends(get_current_user)) -> dict:
     """Return summary of any saved checkpoint, or 404 if none exists."""
-    config = load_config()
-    store = StorageManager(config.data_dir)
+    store = get_storage_backend(user_id)
     cp = _make_checkpoint(store)
     if not cp.exists():
         raise HTTPException(status_code=404, detail="No checkpoint found.")
@@ -334,10 +339,9 @@ async def get_roles_checkpoint() -> dict:
 
 
 @router.get("/roles")
-async def get_roles() -> dict:
+async def get_roles(user_id: str | None = Depends(get_current_user)) -> dict:
     """Return cached role discovery results."""
-    config = load_config()
-    store = StorageManager(config.data_dir)
+    store = get_storage_backend(user_id)
     data = store.read("roles.json")
     if data is None:
         raise HTTPException(status_code=404, detail="No roles found. Run discovery first.")
@@ -349,6 +353,7 @@ async def stream_browser_fetch(
     company_name: str,
     request: Request,
     career_page_url_override: str | None = None,
+    user_id: str | None = Depends(get_current_user),
 ):
     """Stream real-time browser-agent progress for a flagged company via SSE.
 
@@ -377,7 +382,7 @@ async def stream_browser_fetch(
     from jobfinder.roles.ats.career_page import _run_browser_agent_streaming
 
     config = load_config()
-    store = StorageManager(config.data_dir)
+    store = get_storage_backend(user_id)
 
     # ── Registry lookup ───────────────────────────────────────────────────────
 
@@ -563,7 +568,11 @@ async def stream_browser_fetch(
 
 
 @router.delete("/roles/fetch-browser/{company_name}")
-async def kill_browser_fetch(company_name: str, request: Request) -> dict:
+async def kill_browser_fetch(
+    company_name: str,
+    request: Request,
+    user_id: str | None = Depends(get_current_user),
+) -> dict:
     """Kill a running browser-use agent by company name.
 
     Returns ``{killed, partial_jobs}`` on success; 404 if no agent is running.
@@ -593,7 +602,11 @@ async def kill_browser_fetch(company_name: str, request: Request) -> dict:
 
 
 @router.post("/roles/fetch-browser")
-async def fetch_browser_roles(req: FetchBrowserRolesRequest, request: Request) -> dict:
+async def fetch_browser_roles(
+    req: FetchBrowserRolesRequest,
+    request: Request,
+    user_id: str | None = Depends(get_current_user),
+) -> dict:
     """Use a browser-use agent to fetch roles for a single flagged company.
 
     The company must exist in the registry (i.e. it was previously discovered).
@@ -602,7 +615,7 @@ async def fetch_browser_roles(req: FetchBrowserRolesRequest, request: Request) -
     Returns ``{ company_name, roles_found, roles }``.
     """
     config = load_config()
-    store = StorageManager(config.data_dir)
+    store = get_storage_backend(user_id)
 
     # Look up the company in the in-memory registry
     registry: list[dict] = request.app.state.registry

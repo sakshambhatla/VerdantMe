@@ -27,7 +27,7 @@ from __future__ import annotations
 
 from urllib.parse import urlparse
 
-from jobfinder.storage.store import StorageManager
+from jobfinder.storage.backend import StorageBackend
 
 _FILENAME = "api_profiles.json"
 
@@ -41,7 +41,7 @@ def _domain_key(url: str) -> str:
     return urlparse(url).netloc
 
 
-def load_profile(career_page_url: str, store: StorageManager) -> dict | None:
+def load_profile(career_page_url: str, store: StorageBackend) -> dict | None:
     """Return the stored API profile for the domain of *career_page_url*, or None."""
     profiles: dict = store.read(_FILENAME) or {}
     return profiles.get(_domain_key(career_page_url))
@@ -51,7 +51,7 @@ def save_profile(
     career_page_url: str,
     company_name: str,
     profile: dict,
-    store: StorageManager,
+    store: StorageBackend,
 ) -> None:
     """Upsert *profile* for the domain of *career_page_url*.
 
@@ -66,6 +66,6 @@ def save_profile(
     store.write(_FILENAME, profiles)
 
 
-def all_profiles(store: StorageManager) -> dict:
+def all_profiles(store: StorageBackend) -> dict:
     """Return the full api_profiles dict (keyed by domain)."""
     return store.read(_FILENAME) or {}

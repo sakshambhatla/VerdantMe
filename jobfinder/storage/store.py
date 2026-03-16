@@ -5,7 +5,12 @@ import tempfile
 from pathlib import Path
 
 
-class StorageManager:
+class JsonStorageBackend:
+    """Local-filesystem storage backend using JSON files.
+
+    Satisfies the :class:`~jobfinder.storage.backend.StorageBackend` protocol.
+    """
+
     def __init__(self, data_dir: Path):
         self.data_dir = data_dir
         self.data_dir.mkdir(parents=True, exist_ok=True)
@@ -28,3 +33,10 @@ class StorageManager:
 
     def exists(self, filename: str) -> bool:
         return (self.data_dir / filename).exists()
+
+    def delete(self, filename: str) -> None:
+        (self.data_dir / filename).unlink(missing_ok=True)
+
+
+# Backward-compatible alias — existing code imports ``StorageManager``.
+StorageManager = JsonStorageBackend

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useLayoutEffect, useRef } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ResumeTab } from "@/components/ResumeTab";
 import { CompaniesTab } from "@/components/CompaniesTab";
@@ -6,7 +6,12 @@ import { RolesTab } from "@/components/RolesTab";
 import { DebugLogPanel } from "@/components/DebugLogPanel";
 import { Footer } from "@/components/Footer";
 import { AboutModal } from "@/components/AboutModal";
-import { PreferencesModal } from "@/components/PreferencesModal";
+import { ProfileMenu } from "@/components/ProfileMenu";
+import { useAuth } from "@/components/AuthProvider";
+import { LoginPage } from "@/components/LoginPage";
+import { ModeSelectionPage } from "@/components/ModeSelectionPage";
+import { useMode } from "@/contexts/ModeContext";
+import { supabase } from "@/lib/supabase";
 
 // Scroll thresholds with hysteresis.
 //
@@ -22,8 +27,10 @@ const COLLAPSE_SCROLL = 200; // px — collapse only after scrolling this far
 const EXPAND_SCROLL   =  40; // px — expand only when back within 40px of top
 
 function App() {
+  // ── All hooks must come first — no conditional returns before this line ──────
+  const { mode } = useMode();
+  const { user, loading: authLoading } = useAuth();
   const [showAbout, setShowAbout] = useState(false);
-  const [showPreferences, setShowPreferences] = useState(false);
   const [scrolled, setScrolled] = useState(false);
 
   // Header ref for ResizeObserver; spacer ref for direct DOM height sync.
@@ -34,7 +41,15 @@ function App() {
 
   // Keep the spacer in sync with the header's live height throughout the CSS
   // transition. Uses ResizeObserver so pixel values never need hard-coding.
-  useEffect(() => {
+  //
+  // NOTE: deps include `mode`, `authLoading`, and `user` because the header is
+  // only rendered once the app is past all conditional gates:
+  //   • mode === null           → ModeSelectionPage (no header)
+  //   • managed + authLoading   → spinner (no header)
+  //   • managed + !user         → LoginPage (no header)
+  // Any of these transitions can reveal the header without `mode` changing, so
+  // we must re-run whenever any of them flip.
+  useLayoutEffect(() => {
     const header = headerRef.current;
     const spacer = spacerRef.current;
     if (!header || !spacer) return;
@@ -45,7 +60,7 @@ function App() {
     });
     ro.observe(header);
     return () => ro.disconnect();
-  }, []);
+  }, [mode, authLoading, user]);
 
   // Scroll detection with hysteresis (see constants above).
   useEffect(() => {
@@ -59,6 +74,25 @@ function App() {
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
+
+  // ── Conditional renders (all hooks above are always called) ─────────────────
+
+  // Step 1: no mode chosen yet → show landing page
+  if (mode === null) {
+    return <ModeSelectionPage />;
+  }
+
+  // Step 2: managed mode auth gate
+  if (mode === "managed" && supabase && authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center" style={{ background: "var(--app-gradient)" }}>
+        <span className="h-10 w-10 animate-spin rounded-full border-4 border-white border-t-transparent" />
+      </div>
+    );
+  }
+  if (mode === "managed" && supabase && !user) {
+    return <LoginPage />;
+  }
 
   return (
     <div className="min-h-screen relative overflow-hidden" style={{ background: "var(--app-gradient)" }}>
@@ -112,34 +146,44 @@ function App() {
             </div>
           </div>
 
-          {/* Tab band — always visible; layout shifts when scrolled */}
+          {/* Tab band — always visible; three-column layout keeps tabs centered */}
           <div
             className="border-b"
             style={{ borderColor: "var(--glass-border)" }}
           >
-            <div className={`flex items-center${scrolled ? " px-6" : " justify-center"}`}>
-              {/* Compact logo — slides in on the left when scrolled */}
-              <span
-                className="font-black text-white"
-                style={{
-                  fontFamily: "var(--font-display)",
-                  fontSize: "1.25rem",
-                  opacity: scrolled ? 1 : 0,
-                  maxWidth: scrolled ? "200px" : "0px",
-                  overflow: "hidden",
-                  whiteSpace: "nowrap",
-                  marginRight: scrolled ? "1rem" : "0",
-                  transition: "opacity 0.3s ease-in-out, max-width 0.3s ease-in-out, margin-right 0.3s ease-in-out",
-                }}
-              >
-                VerdantMe
-              </span>
+            <div className="flex items-center px-6">
+              {/* Left: compact logo — slides in when scrolled */}
+              <div className="flex items-center" style={{ minWidth: "36px" }}>
+                <span
+                  className="font-black text-white"
+                  style={{
+                    fontFamily: "var(--font-display)",
+                    fontSize: "1.25rem",
+                    opacity: scrolled ? 1 : 0,
+                    maxWidth: scrolled ? "200px" : "0px",
+                    overflow: "hidden",
+                    whiteSpace: "nowrap",
+                    marginRight: scrolled ? "1rem" : "0",
+                    transition: "opacity 0.3s ease-in-out, max-width 0.3s ease-in-out, margin-right 0.3s ease-in-out",
+                  }}
+                >
+                  VerdantMe
+                </span>
+              </div>
 
-              <TabsList className={scrolled ? "" : "justify-center"}>
-                <TabsTrigger value="resume">📄 Upload Resume</TabsTrigger>
-                <TabsTrigger value="companies">🏢 Discover Companies</TabsTrigger>
-                <TabsTrigger value="roles">💼 Discover Roles</TabsTrigger>
-              </TabsList>
+              {/* Center: tabs — always visually centered */}
+              <div className="flex-1 flex justify-center">
+                <TabsList>
+                  <TabsTrigger value="resume">📄 Upload Resume</TabsTrigger>
+                  <TabsTrigger value="companies">🏢 Discover Companies</TabsTrigger>
+                  <TabsTrigger value="roles">💼 Discover Roles</TabsTrigger>
+                </TabsList>
+              </div>
+
+              {/* Right: profile avatar */}
+              <div style={{ minWidth: "36px" }} className="flex justify-end">
+                <ProfileMenu />
+              </div>
             </div>
           </div>
         </header>
@@ -166,15 +210,9 @@ function App() {
         </main>
       </Tabs>
 
-      {/* Footer with About and Preferences modals */}
-      <Footer
-        showAbout={showAbout}
-        onAboutChange={setShowAbout}
-        showPreferences={showPreferences}
-        onPreferencesChange={setShowPreferences}
-      />
+      {/* Footer with About modal */}
+      <Footer onAboutChange={setShowAbout} />
       <AboutModal open={showAbout} onOpenChange={setShowAbout} />
-      <PreferencesModal open={showPreferences} onOpenChange={setShowPreferences} />
     </div>
   );
 }

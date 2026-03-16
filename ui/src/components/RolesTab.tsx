@@ -291,11 +291,12 @@ function FlaggedBox({
     }));
   }
 
-  function startAgent(company: FlaggedCompany, urlOverride?: string) {
+  async function startAgent(company: FlaggedCompany, urlOverride?: string) {
     if (esRefs.current[company.name]) return; // already running
     updateState(company.name, () => ({ status: "running", jobsCollected: 0 }));
 
-    const es = new EventSource(browserAgentStreamUrl(company.name, urlOverride));
+    const url = await browserAgentStreamUrl(company.name, urlOverride);
+    const es = new EventSource(url);
     esRefs.current[company.name] = es;
 
     es.addEventListener("jobs_batch", (e) => {

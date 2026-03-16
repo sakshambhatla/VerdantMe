@@ -34,3 +34,4 @@ ui/dist/
 # Local-only files (never commit)
 local.patch
 security-concerns.md
+plans/

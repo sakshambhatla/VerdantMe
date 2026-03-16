@@ -3,9 +3,11 @@
  * Covers: header rendering, scroll-aware compact mode, tab switching, footer links/modals.
  * Uses vi.mock to stub all API calls so no real HTTP requests are made.
  */
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { ModeProvider } from "@/contexts/ModeContext";
+import { AuthProvider } from "@/components/AuthProvider";
 import App from "@/App";
 
 // ── Mock EventSource (not available in jsdom) ────────────────────────────────
@@ -17,6 +19,10 @@ class MockEventSource {
   close = vi.fn();
 }
 vi.stubGlobal("EventSource", vi.fn(() => new MockEventSource()));
+
+// ── Mock supabase as null (dev mode — no auth) ──────────────────────────────
+
+vi.mock("@/lib/supabase", () => ({ supabase: null }));
 
 // ── Mock the entire API module ────────────────────────────────────────────────
 
@@ -32,9 +38,19 @@ vi.mock("@/lib/api", () => ({
   getUnfilteredRoles: vi.fn().mockRejectedValue({ response: { status: 404 } }),
   getRolesCheckpoint: vi.fn().mockRejectedValue({ response: { status: 404 } }),
   fetchBrowserRoles: vi.fn(),
-  browserAgentStreamUrl: vi.fn().mockReturnValue("/api/roles/fetch-browser/stream"),
+  browserAgentStreamUrl: vi.fn().mockResolvedValue("/api/roles/fetch-browser/stream"),
   killBrowserAgent: vi.fn(),
 }));
+
+// ── Seed local mode so ModeSelectionPage is bypassed in all tests ─────────────
+
+beforeEach(() => {
+  localStorage.setItem("verdantme-mode", "local");
+});
+
+afterEach(() => {
+  localStorage.clear();
+});
 
 // ── Render helper ─────────────────────────────────────────────────────────────
 
@@ -43,9 +59,13 @@ function renderApp() {
     defaultOptions: { queries: { retry: false } },
   });
   return render(
-    <QueryClientProvider client={client}>
-      <App />
-    </QueryClientProvider>
+    <ModeProvider>
+      <AuthProvider>
+        <QueryClientProvider client={client}>
+          <App />
+        </QueryClientProvider>
+      </AuthProvider>
+    </ModeProvider>
   );
 }
 
@@ -207,11 +227,6 @@ describe("App footer", () => {
     expect(screen.getByRole("button", { name: /^About$/i })).toBeInTheDocument();
   });
 
-  it("renders the Preferences button", () => {
-    renderApp();
-    expect(screen.getByRole("button", { name: /Preferences/i })).toBeInTheDocument();
-  });
-
   it("renders the GitHub link", () => {
     renderApp();
     expect(screen.getByRole("link", { name: /GitHub/i })).toBeInTheDocument();
@@ -231,11 +246,13 @@ describe("App footer", () => {
     });
   });
 
-  it("clicking Preferences opens the Preferences modal", async () => {
+});
+
+// ── Profile Menu ───────────────────────────────────────────────────────────
+
+describe("App profile menu", () => {
+  it("renders the profile menu button in the header", () => {
     renderApp();
-    fireEvent.click(screen.getByRole("button", { name: /Preferences/i }));
-    await waitFor(() => {
-      expect(screen.getByRole("dialog")).toBeInTheDocument();
-    });
+    expect(screen.getByRole("button", { name: /Profile menu/i })).toBeInTheDocument();
   });
 });

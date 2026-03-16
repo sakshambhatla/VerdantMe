@@ -2,13 +2,13 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
+from jobfinder.storage.backend import StorageBackend
 from jobfinder.storage.schemas import DiscoveredCompany
-from jobfinder.storage.store import StorageManager
 
 REGISTRY_FILENAME = "company_registry.json"
 
 
-def load_or_bootstrap_registry(store: StorageManager) -> list[dict]:
+def load_or_bootstrap_registry(store: StorageBackend) -> list[dict]:
     """Return registry entries, seeding from companies.json on first run."""
     if store.exists(REGISTRY_FILENAME):
         return (store.read(REGISTRY_FILENAME) or {}).get("companies", [])
@@ -31,7 +31,7 @@ def load_or_bootstrap_registry(store: StorageManager) -> list[dict]:
 
 
 def update_registry_searchable(
-    store: StorageManager, company_name: str, searchable: bool
+    store: StorageBackend, company_name: str, searchable: bool
 ) -> None:
     """Update the searchable field for a specific company after a career page fetch attempt."""
     data = store.read(REGISTRY_FILENAME) or {"companies": []}
@@ -48,7 +48,7 @@ def update_registry_searchable(
     )
 
 
-def upsert_registry(store: StorageManager, new_companies: list[DiscoveredCompany]) -> None:
+def upsert_registry(store: StorageBackend, new_companies: list[DiscoveredCompany]) -> None:
     """Merge *new_companies* into the registry (new entry wins; registry never shrinks)."""
     existing = (store.read(REGISTRY_FILENAME) or {}).get("companies", [])
     seen: dict[str, dict] = {e["name"].lower(): e for e in existing}

@@ -17,7 +17,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 
 interface PreferencesModalProps {
   open: boolean;
@@ -87,7 +86,15 @@ export function PreferencesModal({ open, onOpenChange }: PreferencesModalProps) 
   };
 
   const handleSave = () => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(preferences));
+    // Read-modify-write so we don't clobber fields owned by other modals (e.g. careerFocus)
+    let existing: Record<string, unknown> = {};
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (stored) existing = JSON.parse(stored);
+    } catch {
+      // ignore
+    }
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...existing, ...preferences }));
     setHasChanges(false);
     onOpenChange(false);
   };
@@ -99,7 +106,7 @@ export function PreferencesModal({ open, onOpenChange }: PreferencesModalProps) 
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle className="text-2xl">⚙️ Preferences</DialogTitle>
+          <DialogTitle className="text-2xl">⚙️ LLM Preferences</DialogTitle>
         </DialogHeader>
 
         <div className="grid grid-cols-2 gap-6 py-4">
@@ -197,19 +204,6 @@ export function PreferencesModal({ open, onOpenChange }: PreferencesModalProps) 
               </p>
             </div>
 
-            {/* Career Focus */}
-            <div className="space-y-2">
-              <Label htmlFor="focus" className="text-sm font-semibold">
-                Career Focus (optional)
-              </Label>
-              <Textarea
-                id="focus"
-                value={preferences.careerFocus}
-                onChange={(e) => handlePreferenceChange("careerFocus", e.target.value)}
-                placeholder="E.g., Senior backend engineer, interested in startups, remote work preferred..."
-                className="text-xs min-h-[80px] resize-none"
-              />
-            </div>
           </div>
 
           {/* Right Column: Help Text */}
@@ -253,14 +247,6 @@ export function PreferencesModal({ open, onOpenChange }: PreferencesModalProps) 
               <p>
                 Controls how many API calls per minute. Lower values prevent hitting rate limits.
                 Default is 4 RPM.
-              </p>
-            </div>
-
-            <div>
-              <p className="font-semibold mb-1">🎯 Career Focus</p>
-              <p>
-                Optional information about your career goals and preferences. Helps AI provide more
-                targeted results.
               </p>
             </div>
 

@@ -29,6 +29,10 @@ browser-use = ["browser-use>=0.1"]
 langchain-anthropic = ["langchain-anthropic>=0.3"]
 langchain-google-genai = ["langchain-google-genai>=2.0"]
 
+# supabase: multi-user Postgres backend + JWT auth
+#   pip install -e ".[supabase]"
+supabase = ["supabase>=2.0", "pyjwt[crypto]>=2.0"]
+
 # dev: test suite — pip install -e ".[dev]"
 dev = [
     "pytest>=8.0",

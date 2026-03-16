@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -9,6 +10,7 @@ from fastapi.staticfiles import StaticFiles
 
 from jobfinder.api.routes import companies, logs, resume, roles
 from jobfinder.config import load_config
+from jobfinder.storage import get_storage_backend
 from jobfinder.storage.registry import REGISTRY_FILENAME, load_or_bootstrap_registry
 from jobfinder.storage.store import StorageManager
 from jobfinder.utils.log_stream import init_log_stream
@@ -34,9 +36,13 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="JobFinder", version="0.1.0", lifespan=lifespan)
 
+_cors_origins = os.environ.get(
+    "CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173"
+).split(",")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

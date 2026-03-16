@@ -2,17 +2,21 @@ from __future__ import annotations
 
 import asyncio
 
-from fastapi import APIRouter, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, UploadFile
 
+from jobfinder.api.auth import get_current_user
 from jobfinder.config import load_config
 from jobfinder.resume.parser import parse_resumes
-from jobfinder.storage.store import StorageManager
+from jobfinder.storage import get_storage_backend
 
 router = APIRouter()
 
 
 @router.post("/resume/upload")
-async def upload_resume(file: UploadFile) -> dict:
+async def upload_resume(
+    file: UploadFile,
+    user_id: str | None = Depends(get_current_user),
+) -> dict:
     """Upload a .txt resume file. Clears the resume directory first."""
     if not file.filename or not file.filename.endswith(".txt"):
         raise HTTPException(status_code=400, detail="Only .txt resume files are supported.")
@@ -36,17 +40,16 @@ async def upload_resume(file: UploadFile) -> dict:
     # Parse in a thread (file I/O + regex, not CPU-heavy but keeps event loop free)
     resumes = await asyncio.to_thread(parse_resumes, resume_dir)
 
-    store = StorageManager(config.data_dir)
+    store = get_storage_backend(user_id)
     store.write("resumes.json", [r.model_dump() for r in resumes])
 
     return {"resumes": [r.model_dump() for r in resumes]}
 
 
 @router.get("/resume")
-async def get_resume() -> dict:
+async def get_resume(user_id: str | None = Depends(get_current_user)) -> dict:
     """Return the most recently parsed resume data."""
-    config = load_config()
-    store = StorageManager(config.data_dir)
+    store = get_storage_backend(user_id)
     data = store.read("resumes.json")
     if data is None:
         raise HTTPException(status_code=404, detail="No resume found. Upload one first.")
@@ -54,10 +57,13 @@ async def get_resume() -> dict:
 
 
 @router.delete("/resume/{filename}")
-async def delete_resume(filename: str) -> dict:
+async def delete_resume(
+    filename: str,
+    user_id: str | None = Depends(get_current_user),
+) -> dict:
     """Remove a resume entry from resumes.json and delete its .txt file if present."""
     config = load_config()
-    store = StorageManager(config.data_dir)
+    store = get_storage_backend(user_id)
     data = store.read("resumes.json") or []
 
     updated = [r for r in data if r.get("filename") != filename]

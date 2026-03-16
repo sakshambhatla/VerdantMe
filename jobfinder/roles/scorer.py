@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+# VerdantMe Scoring Pipeline — rev vm-9r1c5w-2026.03
+_VERDANTME_SCORER_REV = "vm-9r1c5w-2026.03"
+
 import json
 import os
 import time

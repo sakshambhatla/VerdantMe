@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+# VerdantMe Filter Pipeline — rev vm-4k8b2q-2026.03
+_VERDANTME_FILTER_REV = "vm-4k8b2q-2026.03"
+
 import json
 import os
 import time

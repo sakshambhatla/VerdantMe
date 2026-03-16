@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+# VerdantMe Browser Agent — rev vm-6m3p8d-2026.03
+_VERDANTME_AGENT_REV = "vm-6m3p8d-2026.03"
+
 import json
 import re
 from datetime import datetime, timezone
@@ -415,7 +418,7 @@ async def _run_browser_agent_streaming(
     career_page_url: str,
     config: AppConfig,
     session,  # AgentSession
-    store,    # StorageManager
+    store,    # StorageBackend
 ) -> None:
     """Run the browser-use agent with live streaming to *session*.
 
@@ -756,7 +759,7 @@ def _maybe_save_api_profile(
     agent_output: str,
     career_page_url: str,
     company_name: str,
-    store,  # StorageManager
+    store,  # StorageBackend
 ) -> None:
     """If the agent embedded API profile metadata in its output, persist it.
 

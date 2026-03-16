@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
+from jobfinder.storage.backend import StorageBackend
 from jobfinder.storage.schemas import DiscoveredRole, RolesCacheEntry
-from jobfinder.storage.store import StorageManager
 
 CACHE_FILENAME = "roles_cache.json"
 CACHE_TTL_DAYS = 2
@@ -18,7 +18,7 @@ class RolesCache:
     future runs.
     """
 
-    def __init__(self, store: StorageManager) -> None:
+    def __init__(self, store: StorageBackend) -> None:
         self._store = store
         data = store.read(CACHE_FILENAME) or {"version": 1, "entries": {}}
         self._entries: dict[str, dict] = data.get("entries", {})

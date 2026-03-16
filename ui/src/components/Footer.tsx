@@ -3,13 +3,10 @@ import { Button } from "@/components/ui/button";
 interface FooterProps {
   showAbout?: boolean;
   onAboutChange: (open: boolean) => void;
-  showPreferences?: boolean;
-  onPreferencesChange: (open: boolean) => void;
 }
 
 export function Footer({
   onAboutChange,
-  onPreferencesChange,
 }: FooterProps) {
   const currentYear = new Date().getFullYear();
   const appVersion = "1.0.0"; // Could pull from package.json
@@ -40,14 +37,6 @@ export function Footer({
             className="text-xs"
           >
             About
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => onPreferencesChange(true)}
-            className="text-xs"
-          >
-            ⚙️ Preferences
           </Button>
           <a
             href="https://github.com/sakshambhatla/VerdantMe"
