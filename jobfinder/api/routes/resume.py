@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile
 
@@ -18,7 +19,10 @@ async def upload_resume(
     user_id: str | None = Depends(get_current_user),
 ) -> dict:
     """Upload a .txt resume file. Clears the resume directory first."""
-    if not file.filename or not file.filename.endswith(".txt"):
+    # Sanitize: strip any directory components to prevent path traversal.
+    # e.g. "../../etc/passwd.txt" → "passwd.txt"
+    safe_filename = Path(file.filename or "").name
+    if not safe_filename or not safe_filename.endswith(".txt"):
         raise HTTPException(status_code=400, detail="Only .txt resume files are supported.")
 
     content = await file.read()
@@ -33,8 +37,8 @@ async def upload_resume(
     for existing in resume_dir.glob("*.txt"):
         existing.unlink()
 
-    # Save the uploaded file
-    dest = resume_dir / file.filename
+    # Save the uploaded file using the sanitized name
+    dest = resume_dir / safe_filename
     dest.write_bytes(content)
 
     # Parse in a thread (file I/O + regex, not CPU-heavy but keeps event loop free)
@@ -72,8 +76,10 @@ async def delete_resume(
 
     store.write("resumes.json", updated)
 
-    # Best-effort: delete the .txt file if it still exists
-    txt_path = config.resume_dir / filename
+    # Best-effort: delete the .txt file if it still exists.
+    # Sanitize filename to prevent path traversal (e.g. "../../config.json").
+    safe_filename = Path(filename).name
+    txt_path = config.resume_dir / safe_filename
     if txt_path.exists():
         txt_path.unlink()
 
