@@ -3,8 +3,9 @@
 -- Vault secrets use the naming convention: user_{uuid}_{provider}_key
 -- All functions are SECURITY DEFINER and granted only to service_role.
 
--- Ensure the Vault extension is available (enabled by default on Supabase).
-CREATE EXTENSION IF NOT EXISTS supabase_vault CASCADE;
+-- Note: supabase_vault extension is pre-installed on all Supabase projects.
+-- Running CREATE EXTENSION here causes a pg_catalog permission error in the
+-- SQL editor; the extension is already available — just use the vault schema.
 
 -- ── store_user_api_key ──────────────────────────────────────────────────────
 -- Upsert: removes any existing secret for (user, provider), then creates new.
