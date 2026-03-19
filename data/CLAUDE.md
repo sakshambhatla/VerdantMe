@@ -12,6 +12,8 @@ Edit schemas in `jobfinder/storage/schemas.py` before changing data shapes here.
 | `company_registry.json` | `discover-companies` (upsert) + `discover-roles` (`searchable` update) | Perpetual registry — grows each run, never shrinks |
 | `company_registry_archive.json` | Manual archive | Previous registry snapshot before fresh reset |
 | `roles.json` | `jobfinder discover-roles` | Fetched + filtered + scored roles, plus flagged companies |
+| `roles_unfiltered.json` | `discover-roles` (auto) | Pre-filtered roles snapshot — all roles before LLM/local filtering |
+| `roles_cache.json` | `discover-roles` (auto) | `RolesCacheEntry[]` — per-company, per-ATS cache with 2-day TTL |
 | `roles_checkpoint.json` | `discover-roles` (auto) | Resume state saved after a `RateLimitError`; deleted on successful completion |
 | `api_profiles.json` | Browser agent (auto) | Discovered career-page API endpoints, keyed by domain (netloc); injected into the agent's task prompt on the next run to skip re-discovery |
 

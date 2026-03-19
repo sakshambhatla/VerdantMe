@@ -34,35 +34,51 @@ The app has two run modes selected on the landing page, persisted in `localStora
 | `"local"` | None | Backend JSON files | Development, offline, no Supabase creds |
 | `"managed"` | Supabase email/password | Supabase Postgres (RLS) | Production, cloud sync |
 
-**Mode selection page** (`ModeSelectionPage.tsx`) is shown on first visit (when `localStorage` has no entry). Users can switch back via the **⇄ Switch Mode** button in the footer.
+**Mode selection page** (`ModeSelectionPage.tsx`) is shown on first visit (when `localStorage` has no entry). Users can switch back via the profile menu or footer.
 
 ## File Map
 ```
 src/
   main.tsx              # React root — ModeProvider > AuthProvider > QueryClientProvider > App
-  App.tsx               # Three-tab shell; routes to ModeSelectionPage / LoginPage / tabs by mode+auth
+  App.tsx               # Three-tab shell (Resume, Companies, Roles); scroll-aware header collapse
+                        # (hysteresis: collapses at 200px scroll, expands at 40px); routes to
+                        # ModeSelectionPage / LoginPage / tabs by mode+auth state
   contexts/
     ModeContext.tsx      # AppMode ("local"|"managed"|null), localStorage-backed, clearMode() flushes cache
   lib/
     api.ts              # axios client + ALL TypeScript types + typed fetch functions
                         # JWT attached only when mode="managed" (reads localStorage directly)
+                        # 401 responses trigger redirect to login
     queryClient.ts      # TanStack Query client (staleTime=5min, retry=1)
     supabase.ts         # Supabase JS client singleton; null if VITE_SUPABASE_URL not set
+    utils.ts            # cn() — clsx + tailwind-merge
   components/
-    ModeSelectionPage.tsx  # Landing page — "Run Local" / "Run Managed" cards
-    AuthProvider.tsx       # Supabase auth context; skipped entirely when mode="local"
-    LoginPage.tsx          # Email/password sign-in + sign-up; shown only in managed mode
-    ResumeTab.tsx          # Drag-and-drop .txt upload → parsed skills/titles card
-    CompaniesTab.tsx       # max_companies + provider form → company table
-    RolesTab.tsx           # Filter form → sortable TanStack Table + flagged callout
-    Footer.tsx             # onSwitchMode prop → renders "⇄ Switch Mode" button
-    ui/                    # shadcn/ui primitives (button, card, tabs, badge, input, label)
+    ModeSelectionPage.tsx    # Landing page — "Run Local" / "Run Managed" cards
+    AuthProvider.tsx          # Supabase auth context; skipped entirely when mode="local"
+    LoginPage.tsx             # Email/password sign-in + sign-up; shown only in managed mode
+    ResumeTab.tsx             # Drag-and-drop .txt upload → parsed skills/titles card
+    CompaniesTab.tsx          # max_companies + provider form; "From Resume"/"From Seed List" toggle;
+                              # company table with ATS color-coding; run history with pagination
+    RolesTab.tsx              # Filter form → sortable TanStack Table + browser-agent SSE streaming
+                              # + flagged companies callout; largest component (~50KB)
+    ProfileMenu.tsx           # Dropdown: avatar (image/initials/icon), My Profile, LLM Preferences,
+                              # Job Search Preferences, API Keys (managed), Switch Mode, Sign Out
+    MyProfileModal.tsx        # Display name + avatar upload (managed mode)
+    PreferencesModal.tsx      # LLM provider + model preferences
+    JobSearchPreferencesModal.tsx  # Default role filters + relevance criteria
+    ApiKeysDialog.tsx         # Store/validate/delete per-user LLM API keys (managed mode)
+    AboutModal.tsx            # Welcome, How It Works, Key Features, Getting Started, Tips, FAQ
+    DebugLogPanel.tsx         # EventSource SSE listener for /api/logs/stream; collapsible terminal
+                              # display with max 500 lines, live indicator, auto-scroll
+    Footer.tsx                # VerdantMe branding, About button, GitHub/Feedback links, copyright
+    ui/                       # shadcn/ui primitives (badge, button, card, dialog, dropdown-menu,
+                              # input, label, radio-group, scroll-area, select, tabs, textarea)
   tests/
     setup.ts             # jest-dom + localStorage mock + ResizeObserver stub
-    App.test.tsx         # Header, scroll, tabs, footer — seeds localStorage to "local" mode
-    ResumeTab.test.tsx   # Upload/display tests
-    api.test.ts          # API helper unit tests
-vite.config.ts           # @ alias → src/; /api proxy → :8000
+    App.test.tsx         # Header, scroll hysteresis, tabs, footer, About modal, profile menu
+    ResumeTab.test.tsx   # Upload/display tests, skill badge overflow
+    api.test.ts          # browserAgentStreamUrl helper tests
+vite.config.ts           # @ alias → src/; /api proxy → :8000; manual chunk splitting
 tailwind.config.js       # Tailwind v4 content paths + shadcn color tokens
 tsconfig.app.json        # paths: "@/*" → "./src/*"
 ```
@@ -92,6 +108,12 @@ const { user, session, signIn, signUp, signOut, loading } = useAuth();
 - Add a new endpoint: add the TypeScript interface, then an `async function` using the `api` axios instance
 - JWT is auto-attached to every request when `mode === "managed"`; local mode sends no auth header
 - Error shape from FastAPI: `{ response: { data: { detail: string } } }`
+
+**Browser agent SSE** (RolesTab):
+- Uses `EventSource` for real-time streaming from `/api/roles/fetch-browser/stream`
+- JWT appended as `?token=<jwt>` query param (EventSource doesn't support custom headers)
+- Events: `jobs_batch` (partial roles), `filter_result`, `score_result`, `done`, `killed`, `error`
+- `browserAgentStreamUrl(company)` builds the URL with proper encoding
 
 **Loading states**:
 - Inline spinner for buttons: `<span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent mr-2" />`

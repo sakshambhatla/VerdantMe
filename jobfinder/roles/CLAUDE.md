@@ -1,12 +1,18 @@
 # jobfinder/roles — Claude Context
 
-Handles everything after companies are discovered: fetching roles from ATS APIs, LLM filtering, and LLM relevance scoring.
+Handles everything after companies are discovered: fetching roles from ATS APIs, filtering (LLM or local), LLM relevance scoring, and browser-agent fallback for unsupported career pages.
 
 ## File Map
 ```
-discovery.py   # discover_roles(companies, config) → (list[DiscoveredRole], list[FlaggedCompany])
-filters.py     # filter_roles(roles, filters, config) → list[DiscoveredRole]
-scorer.py      # score_roles(roles, criteria, config) → list[DiscoveredRole]  (sorted by score)
+discovery.py      # discover_roles(companies, config, store, use_cache, on_progress, metrics)
+                  #   → (list[DiscoveredRole], list[FlaggedCompany])
+filters.py        # filter_roles(roles, filters, config, checkpoint, ...) — LLM batch filtering
+local_filters.py  # filter_roles_local(roles, filters) — fuzzy (rapidfuzz) + semantic (fastembed)
+scorer.py         # score_roles(roles, criteria, config, checkpoint, ...) — LLM batch scoring
+checkpoint.py     # Save/load/delete resumable pipeline state after rate-limit errors
+cache.py          # RolesCache: 2-day TTL per company+ATS pair
+metrics.py        # RunMetricsCollector: mutable metrics tracker → freezes to JobRunMetrics
+errors.py         # RateLimitError exception
 ats/
   __init__.py       # ATS_REGISTRY: dict[str, BaseFetcher] — maps ats_type → fetcher instance
   base.py           # BaseFetcher ABC; ATSFetchError, UnsupportedATSError
@@ -19,11 +25,17 @@ ats/
                     # _run_browser_agent_streaming, _build_task_prompt, _maybe_save_api_profile
 ```
 
-## ATS Fetching (`discovery.py`)
-- Iterates companies, looks up fetcher via `ATS_REGISTRY[company.ats_type]`
-- `UnsupportedATSError` → added to `flagged` list with career page URL for manual check
+## Discovery Pipeline (`discovery.py`)
+
+Two-pass orchestrator with cache + progress callbacks:
+
+**Pass 1 — ATS APIs**: Iterates companies, looks up fetcher via `ATS_REGISTRY[company.ats_type]`.
+- `UnsupportedATSError` → added to `flagged` list with career page URL
 - `ATSFetchError` or any exception → also added to `flagged`, processing continues
 - All three supported ATS (Greenhouse, Lever, Ashby) are **explicitly public APIs** — no auth, no ToS risk
+- If `use_cache=True`, checks `RolesCache` first (2-day TTL); skips fetch if fresh
+
+**Pass 2 — Career page fallback** (if not `skip_career_page`): For flagged companies, tries `fetch_career_page_roles()` — Playwright HTML parsing + LLM extraction. Roles deduplicated by URL and merged with ATS results.
 
 **Adding a new ATS:**
 1. Create `ats/<name>.py` subclassing `BaseFetcher`, implement `fetch(company) -> list[DiscoveredRole]`
@@ -38,6 +50,17 @@ ats/
 - **Confidence levels**: `high` (strict) · `medium` · `low` (inclusive) — maps to different system prompt instructions
 - **Throttled**: calls `get_limiter(config.rpm_limit).wait()` before every LLM call
 - Filter criteria are all optional; if none are set, returns the full list unchanged
+- Supports checkpoint resume: skips already-processed batches via `checkpoint.filter_batches_done`
+
+## Local Filtering (`local_filters.py`)
+
+Non-LLM alternatives — instant, free, no API calls:
+
+**Fuzzy** (`filter_strategy="fuzzy"`): Uses rapidfuzz `token_set_ratio`. Confidence thresholds: high=82, medium=72, low=60.
+
+**Semantic** (`filter_strategy="semantic"`): Uses fastembed ONNX embeddings (cosine similarity). Requires `pip install "jobfinder[semantic]"`. Thresholds: high=0.55, medium=0.45, low=0.35.
+
+Both support metro-aware location matching with alias sets (e.g., SF/Bay Area/Silicon Valley/San Jose all match each other). Posted-after filtering uses `python-dateutil` for natural language date parsing.
 
 ## LLM Scoring (`scorer.py`)
 - **Batch size**: 60 roles/call
@@ -48,6 +71,36 @@ ats/
 - Returns list sorted by `relevance_score` descending
 - `max_tokens=1024` (raised from 512 to fit summaries for large batches)
 - **Throttled**: same rate limiter as filters
+- Supports checkpoint resume via `checkpoint.score_batches_done`
+
+## Checkpoint / Resume (`checkpoint.py`)
+
+Saves pipeline state after rate-limit errors so `--continue` can resume:
+- **Created**: automatically after ATS fetch completes, before filter/score phases
+- **Deleted**: after successful completion of filter + score
+- **Key fields**: `phase` (filter/score), `raw_roles[]`, `flagged_companies[]`, `filter_config`, `filter_batches_done`, `filter_kept_roles[]`, `score_criteria`, `score_batches_done`, `partially_scored_roles[]`
+- CLI `--continue` flag or API checkpoint route triggers resume from saved state
+
+## Cache (`cache.py`)
+
+Per-company, per-ATS role cache with 2-day TTL:
+- **Key format**: `{company_name.lower()}|{ats_type}`
+- `RolesCache.get(company, ats_type)` → `list[DiscoveredRole] | None`
+- `RolesCache.put(company, ats_type, roles)` → saves with timestamp
+- `RolesCache.age_hours(company, ats_type)` → hours since cached
+- Stored as `RolesCacheEntry[]` in `data/roles_cache.json`
+
+## Metrics (`metrics.py`)
+
+`RunMetricsCollector` — mutable tracker populated during discovery:
+- `companies_total / succeeded / failed`
+- `ats_visits{}` — count per ATS type
+- `jobs_per_ats{}`, `jobs_per_company{}` — role counts
+- `playwright_uses`, `browser_agent_uses`
+- `total_roles_fetched / after_filter / after_score`
+- `filter_batches`, `score_batches`
+- `errors[]`, `elapsed_seconds`
+- `to_schema() → dict` — freezes to `JobRunMetrics` for persistence
 
 ## Shared Rate Limiter
 All LLM `_call_anthropic()` / `_call_gemini()` functions in this package call:

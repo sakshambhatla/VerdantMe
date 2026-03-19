@@ -56,6 +56,8 @@ routes/
 - **Managed mode** (SUPABASE_URL set): returns `(user_id, raw_jwt)` after validating the JWT
 - **Dev mode** (no SUPABASE_URL): returns `None` — no auth required
 
+Supports both `Authorization: Bearer <token>` header and `?token=<jwt>` query param (for SSE — EventSource doesn't support custom headers).
+
 Every route handler that needs the user or storage must unpack the tuple:
 ```python
 async def my_endpoint(
@@ -69,6 +71,10 @@ async def my_endpoint(
 **Why `_auth` not `user_id`**: The raw JWT must be threaded to `get_storage_backend` so the Supabase client uses the anon key + per-user JWT (enforcing RLS). Handlers that only need user_id (e.g., vault calls in settings.py) can use `user_id = _auth[0] if _auth else None`.
 
 **Do NOT pass the service role key to storage** — `vault.py` is the only code that uses `SUPABASE_SECRET_KEY` (required for SECURITY DEFINER vault functions). All data queries use `SUPABASE_PUBLISHABLE_KEY` + JWT.
+
+### CORS
+
+Configured in `main.py`. Defaults to `http://localhost:5173,http://127.0.0.1:5173`. Override with `CORS_ORIGINS` env var (comma-separated).
 
 ### Blocking calls → thread pool
 
@@ -110,7 +116,7 @@ Dedup companies by `name.lower()`, roles by `url`. New results take precedence. 
 
 ### `app.state.running_agents`
 
-Keyed by `(user_id, company_name)` — scoped per user to prevent cross-user collision. Holds live `AgentSession` objects. Populated at stream start, removed in the `finally` block. The DELETE endpoint looks up sessions here to set `kill_event` and cancel the task:
+Keyed by `(user_id, company_name)` tuple — scoped per user to prevent cross-user collision. Holds live `AgentSession` objects. Populated at stream start, removed in the `finally` block. The DELETE endpoint looks up sessions here to set `kill_event` and cancel the task:
 ```python
 session = running.get((user_id, company_name))
 ```
