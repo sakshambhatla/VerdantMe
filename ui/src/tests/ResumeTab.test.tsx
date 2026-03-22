@@ -23,6 +23,7 @@ const mockGetResume = getResume as ReturnType<typeof vi.fn>;
 
 function makeResume(overrides: Partial<ParsedResume> = {}): ParsedResume {
   return {
+    id: crypto.randomUUID(),
     filename: "resume.txt",
     skills: ["Python", "SQL", "Spark"],
     job_titles: ["Staff Data Engineer"],
