@@ -52,12 +52,15 @@ def strip_rich_markup(text: str) -> str:
 # ── Public API ──────────────────────────────────────────────────────────────
 
 
-def init_log_stream(data_dir: Path) -> Path:
+def init_log_stream(data_dir: Path) -> Path | None:
     """Create the log directory and open a timestamped log file.
 
-    Called once from the FastAPI lifespan() at startup.  Returns the file path.
+    Called once from the FastAPI lifespan() at startup.  Returns the file path,
+    or None in managed/cloud mode where file I/O is skipped (stdout captured by Render).
     """
     global _log_file_path
+    if os.environ.get("SUPABASE_URL"):
+        return None  # Cloud: skip file I/O; stdout is captured by the container host
     log_dir = data_dir / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")

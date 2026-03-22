@@ -1,0 +1,15 @@
+.venv/
+data/
+resumes/
+config.json
+.env
+*.env
+__pycache__/
+.git/
+ui/
+.claude/
+plans/
+docs/
+tests/
+supabase/
+scripts/

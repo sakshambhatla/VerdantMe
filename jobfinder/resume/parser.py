@@ -47,6 +47,11 @@ TITLE_KEYWORDS = [
 ]
 
 
+def parse_single_resume(filename: str, text: str) -> ParsedResume:
+    """Parse a single resume from in-memory text (no filesystem required)."""
+    return _parse_single(filename, text)
+
+
 def parse_resumes(resume_dir: Path) -> list[ParsedResume]:
     """Parse all .txt files in the given directory."""
     txt_files = sorted(resume_dir.glob("*.txt"))

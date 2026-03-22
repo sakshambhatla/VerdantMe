@@ -45,6 +45,11 @@ app.include_router(logs.router, prefix="/api")
 app.include_router(motivation.router, prefix="/api")
 app.include_router(settings.router, prefix="/api")
 
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
+
+
 # Serve the built React app in production (ui/dist must exist)
 _ui_dist = Path(__file__).parent.parent.parent / "ui" / "dist"
 if _ui_dist.exists():
