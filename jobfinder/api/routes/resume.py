@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 from pathlib import Path
 
@@ -10,6 +11,8 @@ from jobfinder.api.auth import get_current_user
 from jobfinder.config import load_config
 from jobfinder.resume.parser import parse_resumes, parse_single_resume
 from jobfinder.storage import get_storage_backend
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -50,6 +53,8 @@ async def upload_resume(
             dumped["id"] = existing_by_filename[safe_filename].get("id", dumped["id"])
         # Replace entry for this filename; append if new
         updated = [r for r in existing_data if r.get("filename") != safe_filename] + [dumped]
+        stored_ids = [r.get("id") for r in updated]
+        logger.info("Resume upload (managed path): stored %d resume(s) with ids=%s", len(updated), stored_ids)
         store.write("resumes.json", updated)
         return {"resumes": updated}
 
@@ -76,6 +81,8 @@ async def upload_resume(
             dumped["id"] = existing_by_filename[r.filename].get("id", dumped["id"])
         result.append(dumped)
 
+    stored_ids = [r.get("id") for r in result]
+    logger.info("Resume upload (local path): stored %d resume(s) with ids=%s", len(result), stored_ids)
     store.write("resumes.json", result)
     return {"resumes": result}
 

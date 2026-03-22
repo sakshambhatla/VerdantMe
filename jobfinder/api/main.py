@@ -27,10 +27,12 @@ app = FastAPI(title="JobFinder", version="3.0.0", lifespan=lifespan)
 _cors_origins = os.environ.get(
     "CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173"
 ).split(",")
+_cors_origin_regex = os.environ.get("CORS_ORIGIN_REGEX")
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins,
+    allow_origin_regex=_cors_origin_regex,
     allow_credentials=True,
     allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type"],

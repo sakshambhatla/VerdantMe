@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import uuid
 from datetime import datetime, timezone
 
@@ -15,6 +16,8 @@ from jobfinder.storage import get_storage_backend
 from jobfinder.storage.registry import load_or_bootstrap_registry, upsert_registry
 from jobfinder.storage.schemas import DiscoveredCompany
 from jobfinder.system_config import load_system_config
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -57,8 +60,18 @@ async def discover_companies_endpoint(
             raise HTTPException(status_code=400, detail="No resume found. Upload a resume first.")
 
         if req.resume_id:
+            available_ids = [r.get("id") for r in all_resumes]
+            logger.info(
+                "Looking up resume_id=%s among %d resume(s): %s",
+                req.resume_id, len(all_resumes), available_ids,
+            )
             matched = [r for r in all_resumes if r.get("id") == req.resume_id]
             if not matched:
+                logger.warning(
+                    "Resume ID mismatch: requested=%s, available=%s, raw_data_keys=%s",
+                    req.resume_id, available_ids,
+                    [list(r.keys()) for r in all_resumes],
+                )
                 raise HTTPException(
                     status_code=400,
                     detail=f"Resume with id '{req.resume_id}' not found.",

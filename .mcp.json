@@ -3,6 +3,20 @@
     "supabase": {
       "type": "http",
       "url": "https://mcp.supabase.com?features=database%2Cdocs%2Cdebugging%2Cdevelopment%2Cbranching%2Cstorage"
+    },
+    "render": {
+      "type": "http",
+      "url": "https://mcp.render.com/mcp",
+      "headers": {
+        "Authorization": "Bearer ${RENDER_API_KEY}"
+      }
+    },
+    "vercel": {
+      "type": "http",
+      "url": "https://mcp.vercel.com",
+      "headers": {
+        "Authorization": "Bearer ${VERCEL_API_KEY}"
+      }
     }
   }
 }
