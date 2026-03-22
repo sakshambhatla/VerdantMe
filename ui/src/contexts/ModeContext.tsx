@@ -18,6 +18,10 @@ interface ModeContextValue {
 const STORAGE_KEY = "verdantme-mode";
 
 function readStoredMode(): AppMode | null {
+  if (import.meta.env.VITE_FORCE_MANAGED === "true") {
+    localStorage.setItem(STORAGE_KEY, "managed");
+    return "managed";
+  }
   const raw = localStorage.getItem(STORAGE_KEY);
   if (raw === "local" || raw === "managed") return raw;
   return null;

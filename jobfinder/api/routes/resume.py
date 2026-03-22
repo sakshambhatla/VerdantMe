@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import asyncio
+import os
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile
 
 from jobfinder.api.auth import get_current_user
 from jobfinder.config import load_config
-from jobfinder.resume.parser import parse_resumes
+from jobfinder.resume.parser import parse_resumes, parse_single_resume
 from jobfinder.storage import get_storage_backend
 
 router = APIRouter()
@@ -30,22 +31,40 @@ async def upload_resume(
     if len(content) > 512_000:
         raise HTTPException(status_code=413, detail="Resume file too large. Maximum size is 500 KB.")
 
+    store = get_storage_backend(user_id, jwt_token)
+
+    if os.environ.get("SUPABASE_URL"):
+        # Managed/cloud mode: parse in memory — no disk write needed.
+        # The .txt files would be lost on container restart anyway.
+        text = content.decode("utf-8", errors="replace")
+        parsed_resume = await asyncio.to_thread(parse_single_resume, safe_filename, text)
+
+        existing_data = store.read("resumes.json") or []
+        existing_by_filename: dict[str, dict] = {
+            r.get("filename", ""): r
+            for r in existing_data
+            if isinstance(r, dict)
+        }
+        dumped = parsed_resume.model_dump()
+        if safe_filename in existing_by_filename:
+            dumped["id"] = existing_by_filename[safe_filename].get("id", dumped["id"])
+        # Replace entry for this filename; append if new
+        updated = [r for r in existing_data if r.get("filename") != safe_filename] + [dumped]
+        store.write("resumes.json", updated)
+        return {"resumes": updated}
+
+    # Local mode: write .txt to disk, then parse all files in the directory.
     config = load_config()
     resume_dir = config.resume_dir
     resume_dir.mkdir(parents=True, exist_ok=True)
 
-    # Save the uploaded file (overwrites if same filename exists)
     dest = resume_dir / safe_filename
     dest.write_bytes(content)
 
-    # Parse ALL resumes in the directory (multi-resume mode)
     all_parsed = await asyncio.to_thread(parse_resumes, resume_dir)
 
-    store = get_storage_backend(user_id, jwt_token)
-
-    # Preserve existing resume IDs for files that haven't changed
     existing_data = store.read("resumes.json") or []
-    existing_by_filename: dict[str, dict] = {}
+    existing_by_filename = {}
     if isinstance(existing_data, list):
         for r in existing_data:
             existing_by_filename[r.get("filename", "")] = r
@@ -53,7 +72,6 @@ async def upload_resume(
     result = []
     for r in all_parsed:
         dumped = r.model_dump()
-        # Reuse existing UUID if this filename was already uploaded
         if r.filename in existing_by_filename:
             dumped["id"] = existing_by_filename[r.filename].get("id", dumped["id"])
         result.append(dumped)

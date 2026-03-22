@@ -1,7 +1,7 @@
 import axios from "axios";
 import { supabase } from "@/lib/supabase";
 
-const api = axios.create({ baseURL: "/api" });
+const api = axios.create({ baseURL: import.meta.env.VITE_API_BASE_URL || "/api" });
 
 // Attach Supabase JWT to every request when in managed mode
 api.interceptors.request.use(async (config) => {
@@ -406,7 +406,8 @@ export async function browserAgentStreamUrl(
   company_name: string,
   careerPageUrlOverride?: string,
 ): Promise<string> {
-  let url = `/api/roles/fetch-browser/stream?company_name=${encodeURIComponent(company_name)}`;
+  const _base = (import.meta.env.VITE_API_BASE_URL || "/api").replace(/\/$/, "");
+  let url = `${_base}/roles/fetch-browser/stream?company_name=${encodeURIComponent(company_name)}`;
   if (careerPageUrlOverride) {
     url += `&career_page_url_override=${encodeURIComponent(careerPageUrlOverride)}`;
   }
