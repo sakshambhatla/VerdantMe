@@ -6,8 +6,10 @@ log stream endpoint is disabled to prevent cross-user data leakage.
 from __future__ import annotations
 
 import contextvars
+import json
 import os
 import re
+import sys
 import threading
 from collections import deque
 from datetime import datetime
@@ -82,10 +84,11 @@ def log(message: str, level: str = "info", *, run_id: str | None = None) -> None
 
     effective_run_id = run_id or _current_run_id.get(None)
 
-    # 1. Console output (unchanged Rich behaviour)
-    from jobfinder.utils.display import console
-
-    console.print(message)
+    # 1. Console output — structured JSON in cloud mode, Rich locally
+    _is_cloud = bool(os.environ.get("SUPABASE_URL"))
+    if not _is_cloud:
+        from jobfinder.utils.display import console
+        console.print(message)
 
     # 2. Strip Rich markup for plain text destinations
     plain = strip_rich_markup(message).strip()
@@ -93,6 +96,17 @@ def log(message: str, level: str = "info", *, run_id: str | None = None) -> None
         return
 
     timestamp = datetime.now().strftime("%H:%M:%S")
+
+    # 2b. Structured JSON to stdout in cloud mode (parsed by log stream providers)
+    if _is_cloud:
+        json_entry: dict[str, str] = {
+            "timestamp": datetime.now().isoformat(),
+            "level": level,
+            "message": plain,
+        }
+        if effective_run_id:
+            json_entry["run_id"] = effective_run_id
+        print(json.dumps(json_entry), file=sys.stdout, flush=True)
 
     # 3. Write to log file (thread-safe)
     if _log_file_path is not None:
