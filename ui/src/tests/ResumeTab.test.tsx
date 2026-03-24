@@ -56,13 +56,13 @@ describe("ResumeTab", () => {
   it("renders the drop zone text", async () => {
     mockGetResume.mockRejectedValue({ response: { status: 404 } });
     renderTab();
-    expect(screen.getByText(/Drop your resume here/i)).toBeInTheDocument();
+    expect(screen.getByText(/Drop your dossier here/i)).toBeInTheDocument();
   });
 
-  it("shows .txt only hint", async () => {
+  it("shows file type hint", async () => {
     mockGetResume.mockRejectedValue({ response: { status: 404 } });
     renderTab();
-    expect(screen.getByText(/\.txt files only/i)).toBeInTheDocument();
+    expect(screen.getByText(/TXT files/i)).toBeInTheDocument();
   });
 
   it("shows parsed skills when resume exists", async () => {
@@ -104,14 +104,14 @@ describe("ResumeTab", () => {
     });
   });
 
-  it("shows '+N more' badge when skills exceed 20", async () => {
-    const manySkills = Array.from({ length: 25 }, (_, i) => `Skill${i}`);
+  it("shows '+N more' badge when skills exceed 8", async () => {
+    const manySkills = Array.from({ length: 12 }, (_, i) => `Skill${i}`);
     mockGetResume.mockResolvedValue({
       resumes: [makeResume({ skills: manySkills })],
     });
     renderTab();
     await waitFor(() => {
-      expect(screen.getByText(/\+5 more/i)).toBeInTheDocument();
+      expect(screen.getByText(/\+4 more/i)).toBeInTheDocument();
     });
   });
 
