@@ -19,7 +19,7 @@ createRoot(document.getElementById('root')!).render(
             <Routes>
               <Route path="/" element={<LandingPage />} />
               <Route path="/about" element={<AboutPage />} />
-              <Route path="/app" element={<App />} />
+              <Route path="/app/*" element={<App />} />
             </Routes>
           </QueryClientProvider>
         </AuthProvider>

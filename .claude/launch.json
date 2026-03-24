@@ -4,7 +4,7 @@
     {
       "name": "ui-dev",
       "runtimeExecutable": "/bin/bash",
-      "runtimeArgs": ["-c", "export NVM_DIR=\"$HOME/.nvm\" && source \"$NVM_DIR/nvm.sh\" && nvm use 20 && pnpm --dir /Users/sakshambhatla/workplace/JobFinder/ui dev"],
+      "runtimeArgs": ["-c", "export NVM_DIR=\"$HOME/.nvm\" && source \"$NVM_DIR/nvm.sh\" && nvm use 20 && pnpm --dir /Users/sakshambhatla/workplace/JobFinder-temp/ui dev"],
       "port": 5173
     },
     {

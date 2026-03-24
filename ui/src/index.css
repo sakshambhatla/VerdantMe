@@ -260,3 +260,38 @@ header.compact [role="tablist"] {
 .text-glow {
   text-shadow: 0 0 20px rgba(163, 166, 255, 0.3);
 }
+
+/* ─── App shell (reuses Luminal tokens) ─── */
+.app-shell {
+  font-family: 'Inter', sans-serif;
+  background: #000000;
+  color: #ffffff;
+}
+
+.app-shell ::selection {
+  background-color: rgba(147, 150, 255, 0.3);
+}
+
+.ghost-border {
+  border: 1px solid rgba(72, 72, 71, 0.2);
+}
+
+.glass-panel {
+  background: rgba(44, 44, 44, 0.1);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+.asymmetric-glow {
+  position: absolute;
+  top: -10%;
+  right: -10%;
+  width: 40%;
+  height: 40%;
+  background: radial-gradient(circle, rgba(163, 166, 255, 0.08) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.material-symbols-outlined {
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+}
