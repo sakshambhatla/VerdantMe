@@ -17,7 +17,7 @@ class StoreApiKeyRequest(BaseModel):
 
 class StoreGoogleTokensRequest(BaseModel):
     access_token: str
-    refresh_token: str
+    refresh_token: str = ""  # May be empty if Google skipped consent screen
 
 
 @router.get("/settings/api-keys")
@@ -143,8 +143,8 @@ async def store_google_tokens_endpoint(
         raise HTTPException(status_code=401, detail="Authentication required.")
     if not os.environ.get("SUPABASE_URL"):
         raise HTTPException(status_code=400, detail="Token storage requires managed mode (Supabase).")
-    if not req.access_token.strip() or not req.refresh_token.strip():
-        raise HTTPException(status_code=400, detail="Both access_token and refresh_token are required.")
+    if not req.access_token.strip():
+        raise HTTPException(status_code=400, detail="access_token is required.")
 
     from jobfinder.storage.vault import store_google_tokens
 

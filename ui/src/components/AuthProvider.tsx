@@ -57,17 +57,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, s) => {
       setSession(s);
-      // Capture Google OAuth provider tokens for Gmail/Calendar integration
-      if (
-        s?.provider_token &&
-        s?.provider_refresh_token &&
-        _event === "SIGNED_IN"
-      ) {
-        storeGoogleTokens(s.provider_token, s.provider_refresh_token).catch(
-          () => {
-            // Non-blocking: token storage failure shouldn't break auth flow
-          },
+
+      if (_event === "SIGNED_IN") {
+        // Capture Google OAuth provider tokens for Gmail/Calendar integration.
+        // provider_token is always present; provider_refresh_token may be null
+        // if Google skipped the consent screen (see docs/docs.md).
+        const accessToken = s?.provider_token;
+        const refreshToken = s?.provider_refresh_token;
+        console.info(
+          "[Auth] SIGNED_IN — provider_token:",
+          accessToken ? "present" : "missing",
+          "| provider_refresh_token:",
+          refreshToken ? "present" : "missing",
         );
+
+        if (accessToken) {
+          storeGoogleTokens(accessToken, refreshToken ?? "").catch((err) => {
+            console.warn("[Auth] Failed to store Google tokens:", err);
+          });
+        }
+      }
+
+      if (_event === "SIGNED_OUT") {
+        // Redirect to landing page on sign-out
+        window.location.href = "/";
       }
     });
 
@@ -91,7 +104,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: window.location.origin,
+        redirectTo: `${window.location.origin}/app`,
         scopes:
           "https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/calendar.events.readonly",
         queryParams: {
