@@ -263,3 +263,177 @@ def reason_pipeline(
         return ReasoningResult(summary=f"LLM reasoning failed: {exc}")
 
     return _parse_llm_response(response_text, entries)
+
+
+# ── Signal type → stage mapping for rule-based fallback ──────────────────
+
+_SIGNAL_STAGE_MAP: dict[str, str | None] = {
+    "offer": "offer",
+    "rejection": "rejected",
+    "scheduling": None,  # Keep current stage, just update badge
+    "confirmation": None,
+    "recruiter_outreach": "not_started",
+}
+
+_SIGNAL_BADGE_MAP: dict[str, str | None] = {
+    "offer": "new",
+    "rejection": None,
+    "scheduling": "sched",
+    "confirmation": "done",
+    "recruiter_outreach": "new",
+}
+
+_SIGNAL_CONFIDENCE: dict[str, str] = {
+    "offer": "high",
+    "rejection": "high",
+    "scheduling": "medium",
+    "confirmation": "medium",
+    "recruiter_outreach": "low",
+}
+
+# Priority for dedup: higher = wins when multiple signals for same company
+_SIGNAL_PRIORITY: dict[str, int] = {
+    "offer": 5,
+    "rejection": 4,
+    "scheduling": 3,
+    "confirmation": 2,
+    "recruiter_outreach": 1,
+}
+
+_CALENDAR_STAGE_MAP: dict[str, str | None] = {
+    "upcoming_interview": None,
+    "completed_interview": None,
+    "scheduled": None,
+}
+
+_CALENDAR_BADGE_MAP: dict[str, str | None] = {
+    "upcoming_interview": "sched",
+    "completed_interview": "done",
+    "scheduled": "sched",
+}
+
+
+def rule_based_suggestions(
+    gmail_signals: list[dict],
+    calendar_signals: list[dict],
+    entries: list[dict],
+) -> ReasoningResult:
+    """Generate pipeline suggestions from signals using rules (no LLM needed).
+
+    Maps signal types to stage transitions and badge updates. Used as a
+    fallback when no LLM API key is available, or when the LLM returns
+    no suggestions.
+    """
+    # Build case-insensitive lookup: company_name → entry
+    name_to_entry: dict[str, dict] = {}
+    for e in entries:
+        name = e.get("company_name", "").lower()
+        if name:
+            name_to_entry[name] = e
+
+    # Deduplicate: keep highest-priority signal per company
+    best_gmail: dict[str, dict] = {}
+    for g in gmail_signals:
+        company = g.get("company_name", "").strip()
+        if not company:
+            continue
+        key = company.lower()
+        signal_type = g.get("signal_type", "recruiter_outreach")
+        priority = _SIGNAL_PRIORITY.get(signal_type, 0)
+        existing = best_gmail.get(key)
+        if not existing or priority > _SIGNAL_PRIORITY.get(
+            existing.get("signal_type", ""), 0
+        ):
+            best_gmail[key] = g
+
+    suggestions: list[PipelineSuggestion] = []
+    new_companies: list[PipelineSuggestion] = []
+    seen_companies: set[str] = set()
+
+    # Process Gmail signals
+    for key, g in best_gmail.items():
+        company = g.get("company_name", "").strip()
+        signal_type = g.get("signal_type", "recruiter_outreach")
+        subject = g.get("subject", "")
+        is_new = g.get("is_new_company", False)
+        entry = name_to_entry.get(key)
+
+        suggested_stage = _SIGNAL_STAGE_MAP.get(signal_type)
+        suggested_badge = _SIGNAL_BADGE_MAP.get(signal_type)
+        confidence = _SIGNAL_CONFIDENCE.get(signal_type, "low")
+        reason = subject[:120] if subject else f"{signal_type} signal detected"
+
+        if entry:
+            # Existing entry — suggest update
+            current_stage = entry.get("stage", "not_started")
+            # Only suggest stage change if it's meaningful
+            if suggested_stage and suggested_stage == current_stage:
+                suggested_stage = None  # No change needed
+            suggestions.append(
+                PipelineSuggestion(
+                    entry_id=entry.get("id"),
+                    company_name=company,
+                    suggested_stage=suggested_stage,
+                    suggested_badge=suggested_badge,
+                    reason=reason,
+                    confidence=confidence,
+                    source="gmail",
+                )
+            )
+        elif is_new and key not in seen_companies:
+            # New company detected
+            new_companies.append(
+                PipelineSuggestion(
+                    entry_id=None,
+                    company_name=company,
+                    suggested_stage=suggested_stage or "not_started",
+                    suggested_badge="new",
+                    reason=reason,
+                    confidence=confidence,
+                    source="gmail",
+                )
+            )
+            seen_companies.add(key)
+
+    # Process Calendar signals
+    for c in calendar_signals:
+        company = (c.get("company_name") or "").strip()
+        if not company:
+            continue
+        key = company.lower()
+        if key in seen_companies:
+            continue  # Already handled by Gmail signal
+
+        event_type = c.get("event_type", "scheduled")
+        entry = name_to_entry.get(key)
+        suggested_badge = _CALENDAR_BADGE_MAP.get(event_type)
+        title = c.get("title", "")
+        reason = f"{title[:80]} ({c.get('start_time', '')})"
+
+        if entry:
+            suggestions.append(
+                PipelineSuggestion(
+                    entry_id=entry.get("id"),
+                    company_name=company,
+                    suggested_stage=None,
+                    suggested_badge=suggested_badge,
+                    reason=reason,
+                    confidence="medium",
+                    source="calendar",
+                )
+            )
+            seen_companies.add(key)
+
+    n_suggest = len(suggestions)
+    n_new = len(new_companies)
+    summary = (
+        f"Found {n_suggest} update(s) for existing entries "
+        f"and {n_new} new company signal(s) from email/calendar."
+    )
+    log.info("Rule-based fallback: %d suggestions, %d new companies", n_suggest, n_new)
+
+    return ReasoningResult(
+        suggestions=suggestions,
+        new_companies=new_companies,
+        summary=summary,
+    )
