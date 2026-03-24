@@ -8,6 +8,7 @@ interface MobileNavProps {
 const items = [
   { label: "Home", icon: "dashboard", tab: "dashboard" },
   { label: "Craft", icon: "description", tab: "resume" },
+  { label: "Companies", icon: "apartment", tab: "companies" },
   { label: "Roles", icon: "explore", tab: "roles" },
   { label: "Pipeline", icon: "dynamic_feed", tab: "pipeline" },
 ];
