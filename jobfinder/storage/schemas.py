@@ -138,3 +138,53 @@ class ExternalJobCacheEntry(BaseModel):
     expires_at: str          # ISO timestamp (UTC)
     total_jobs: int
     roles: list[DiscoveredRole]
+
+
+# ── Pipeline ─────────────────────────────────────────────────────────────────
+
+PIPELINE_STAGES = {
+    "not_started", "recruiter", "hm_screen", "onsite", "offer", "blocked", "rejected",
+}
+PIPELINE_BADGES = {"done", "new", "panel", "await", "sched"}
+
+
+class PipelineEntry(BaseModel):
+    """A single company in the user's job-search pipeline."""
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    company_name: str
+    role_title: str | None = None
+    stage: str = "not_started"
+    note: str = ""
+    next_action: str | None = None
+    badge: str | None = None
+    tags: list[str] = []
+    sort_order: int = 0
+    created_at: str = ""
+    updated_at: str = ""
+
+    @field_validator("stage", mode="before")
+    @classmethod
+    def validate_stage(cls, v: object) -> str:
+        if isinstance(v, str) and v in PIPELINE_STAGES:
+            return v
+        return "not_started"
+
+    @field_validator("badge", mode="before")
+    @classmethod
+    def validate_badge(cls, v: object) -> str | None:
+        if v is None:
+            return None
+        if isinstance(v, str) and v in PIPELINE_BADGES:
+            return v
+        return None
+
+
+class PipelineUpdate(BaseModel):
+    """A changelog entry for a pipeline entry (stage change, note, etc.)."""
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    entry_id: str
+    update_type: str = "note"  # "note" | "stage_change" | "created"
+    from_stage: str | None = None
+    to_stage: str | None = None
+    message: str = ""
+    created_at: str = ""

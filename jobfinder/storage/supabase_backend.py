@@ -157,6 +157,18 @@ class SupabaseStorageBackend:
                 "exists": self._exists_motivation,
                 "delete": self._delete_motivation,
             },
+            "pipeline_entries.json": {
+                "read": self._read_pipeline_entries,
+                "write": self._write_pipeline_entries,
+                "exists": self._exists_pipeline_entries,
+                "delete": self._delete_pipeline_entries,
+            },
+            "pipeline_updates.json": {
+                "read": self._read_pipeline_updates,
+                "write": self._write_pipeline_updates,
+                "exists": self._exists_pipeline_updates,
+                "delete": self._delete_pipeline_updates,
+            },
         }
         return handlers.get(collection)
 
@@ -771,3 +783,119 @@ class SupabaseStorageBackend:
 
     def _delete_motivation(self) -> None:
         self._client.table("user_motivations").delete().eq("user_id", self._user_id).execute()
+
+    # ── Pipeline Entries ───────────────────────────────────────────────────────
+
+    def _read_pipeline_entries(self) -> list | None:
+        resp = (
+            self._client.table("pipeline_entries")
+            .select("*")
+            .eq("user_id", self._user_id)
+            .order("sort_order")
+            .execute()
+        )
+        if not resp.data:
+            return None
+        return [self._row_to_pipeline_entry(r) for r in resp.data]
+
+    def _write_pipeline_entries(self, data: list) -> None:
+        if not isinstance(data, list):
+            return
+        for entry in data:
+            row = {
+                "id": entry.get("id"),
+                "user_id": self._user_id,
+                "company_name": entry.get("company_name", ""),
+                "role_title": entry.get("role_title"),
+                "stage": entry.get("stage", "not_started"),
+                "note": entry.get("note", ""),
+                "next_action": entry.get("next_action"),
+                "badge": entry.get("badge"),
+                "tags": entry.get("tags", []),
+                "sort_order": entry.get("sort_order", 0),
+                "created_at": entry.get("created_at") or datetime.now(timezone.utc).isoformat(),
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }
+            self._client.table("pipeline_entries").upsert(row, on_conflict="id").execute()
+
+    def _exists_pipeline_entries(self) -> bool:
+        resp = (
+            self._client.table("pipeline_entries")
+            .select("id", count="exact")
+            .eq("user_id", self._user_id)
+            .execute()
+        )
+        return (resp.count or 0) > 0
+
+    def _delete_pipeline_entries(self) -> None:
+        self._client.table("pipeline_entries").delete().eq("user_id", self._user_id).execute()
+
+    @staticmethod
+    def _row_to_pipeline_entry(row: dict) -> dict:
+        return {
+            "id": row["id"],
+            "company_name": row.get("company_name", ""),
+            "role_title": row.get("role_title"),
+            "stage": row.get("stage", "not_started"),
+            "note": row.get("note", ""),
+            "next_action": row.get("next_action"),
+            "badge": row.get("badge"),
+            "tags": row.get("tags", []),
+            "sort_order": row.get("sort_order", 0),
+            "created_at": row.get("created_at", ""),
+            "updated_at": row.get("updated_at", ""),
+        }
+
+    # ── Pipeline Updates ──────────────────────────────────────────────────────
+
+    def _read_pipeline_updates(self) -> list | None:
+        resp = (
+            self._client.table("pipeline_updates")
+            .select("*")
+            .eq("user_id", self._user_id)
+            .order("created_at", desc=True)
+            .execute()
+        )
+        if not resp.data:
+            return None
+        return [self._row_to_pipeline_update(r) for r in resp.data]
+
+    def _write_pipeline_updates(self, data: list) -> None:
+        if not isinstance(data, list):
+            return
+        for update in data:
+            row = {
+                "id": update.get("id"),
+                "user_id": self._user_id,
+                "entry_id": update.get("entry_id"),
+                "update_type": update.get("update_type", "note"),
+                "from_stage": update.get("from_stage"),
+                "to_stage": update.get("to_stage"),
+                "message": update.get("message", ""),
+                "created_at": update.get("created_at") or datetime.now(timezone.utc).isoformat(),
+            }
+            self._client.table("pipeline_updates").upsert(row, on_conflict="id").execute()
+
+    def _exists_pipeline_updates(self) -> bool:
+        resp = (
+            self._client.table("pipeline_updates")
+            .select("id", count="exact")
+            .eq("user_id", self._user_id)
+            .execute()
+        )
+        return (resp.count or 0) > 0
+
+    def _delete_pipeline_updates(self) -> None:
+        self._client.table("pipeline_updates").delete().eq("user_id", self._user_id).execute()
+
+    @staticmethod
+    def _row_to_pipeline_update(row: dict) -> dict:
+        return {
+            "id": row["id"],
+            "entry_id": row.get("entry_id", ""),
+            "update_type": row.get("update_type", "note"),
+            "from_stage": row.get("from_stage"),
+            "to_stage": row.get("to_stage"),
+            "message": row.get("message", ""),
+            "created_at": row.get("created_at", ""),
+        }

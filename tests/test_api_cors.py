@@ -12,10 +12,9 @@ class TestCorsHeaders:
             },
         )
         allowed = resp.headers.get("access-control-allow-methods", "")
-        for method in ("GET", "POST", "DELETE"):
+        for method in ("GET", "POST", "PUT", "DELETE"):
             assert method in allowed
         # Wildcard or unexpected methods should not be present
-        assert "PUT" not in allowed
         assert "PATCH" not in allowed
 
     def test_preflight_allows_expected_headers(self, client):

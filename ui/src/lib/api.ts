@@ -504,6 +504,126 @@ export async function deleteMotivation(): Promise<void> {
 
 // ─── Browser Agent ───────────────────────────────────────────────────────────
 
+// ─── Pipeline ────────────────────────────────────────────────────────────────
+
+export type PipelineStage =
+  | "not_started"
+  | "recruiter"
+  | "hm_screen"
+  | "onsite"
+  | "offer"
+  | "blocked"
+  | "rejected";
+
+export type PipelineBadge = "done" | "new" | "panel" | "await" | "sched";
+
+export interface PipelineEntry {
+  id: string;
+  company_name: string;
+  role_title: string | null;
+  stage: PipelineStage;
+  note: string;
+  next_action: string | null;
+  badge: PipelineBadge | null;
+  tags: string[];
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PipelineUpdate {
+  id: string;
+  entry_id: string;
+  update_type: "note" | "stage_change" | "created";
+  from_stage: string | null;
+  to_stage: string | null;
+  message: string;
+  created_at: string;
+}
+
+export interface PipelineStats {
+  stage_counts: Partial<Record<PipelineStage, number>>;
+  total: number;
+}
+
+export async function getPipelineEntries(
+  stage?: PipelineStage,
+): Promise<{ entries: PipelineEntry[]; total: number }> {
+  const { data } = await api.get("/pipeline/entries", {
+    params: stage ? { stage } : {},
+  });
+  return data;
+}
+
+export async function getPipelineEntry(id: string): Promise<PipelineEntry> {
+  const { data } = await api.get(`/pipeline/entries/${encodeURIComponent(id)}`);
+  return data;
+}
+
+export async function createPipelineEntry(
+  entry: {
+    company_name: string;
+    role_title?: string | null;
+    stage?: PipelineStage;
+    note?: string;
+    next_action?: string | null;
+    badge?: PipelineBadge | null;
+    tags?: string[];
+  },
+): Promise<PipelineEntry> {
+  const { data } = await api.post("/pipeline/entries", entry);
+  return data;
+}
+
+export async function updatePipelineEntry(
+  id: string,
+  updates: Partial<PipelineEntry>,
+): Promise<PipelineEntry> {
+  const { data } = await api.put(
+    `/pipeline/entries/${encodeURIComponent(id)}`,
+    updates,
+  );
+  return data;
+}
+
+export async function deletePipelineEntry(id: string): Promise<void> {
+  await api.delete(`/pipeline/entries/${encodeURIComponent(id)}`);
+}
+
+export async function reorderPipelineEntries(
+  moves: Array<{ id: string; stage: string; sort_order: number }>,
+): Promise<void> {
+  await api.post("/pipeline/entries/reorder", { moves });
+}
+
+export async function getPipelineUpdates(
+  entryId?: string,
+  limit = 50,
+): Promise<{ updates: PipelineUpdate[]; total: number }> {
+  const { data } = await api.get("/pipeline/updates", {
+    params: { ...(entryId ? { entry_id: entryId } : {}), limit },
+  });
+  return data;
+}
+
+export async function createPipelineUpdate(
+  entryId: string,
+  message: string,
+): Promise<PipelineUpdate> {
+  const { data } = await api.post("/pipeline/updates", {
+    entry_id: entryId,
+    message,
+  });
+  return data;
+}
+
+export async function getPipelineStats(): Promise<PipelineStats> {
+  const { data } = await api.get("/pipeline/stats");
+  return data;
+}
+
+// ─── Browser Agent ───────────────────────────────────────────────────────────
+
 /** Send a kill signal to a running browser agent. */
 export async function killBrowserAgent(
   company_name: string

@@ -40,3 +40,36 @@ class MotivationChatRequest(BaseModel):
 
 class FetchBrowserRolesRequest(BaseModel):
     company_name: str  # must exist in the company registry
+
+
+# ── Pipeline ─────────────────────────────────────────────────────────────────
+
+class CreatePipelineEntryRequest(BaseModel):
+    company_name: str
+    role_title: str | None = None
+    stage: str = "not_started"
+    note: str = ""
+    next_action: str | None = None
+    badge: str | None = None
+    tags: list[str] = []
+
+
+class UpdatePipelineEntryRequest(BaseModel):
+    company_name: str | None = None
+    role_title: str | None = None
+    stage: str | None = None
+    note: str | None = None
+    next_action: str | None = None
+    badge: str | None = None
+    tags: list[str] | None = None
+    sort_order: int | None = None
+
+
+class ReorderPipelineRequest(BaseModel):
+    """Batch update sort_order and stage for drag-and-drop."""
+    moves: list[dict]  # [{id, stage, sort_order}, ...]
+
+
+class CreatePipelineUpdateRequest(BaseModel):
+    entry_id: str
+    message: str
