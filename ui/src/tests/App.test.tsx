@@ -47,6 +47,20 @@ vi.mock("@/lib/api", () => ({
   getMotivation: vi.fn().mockResolvedValue(null),
   sendMotivationChat: vi.fn(),
   deleteMotivation: vi.fn(),
+  // Pipeline
+  getPipelineEntries: vi.fn().mockResolvedValue({ entries: [], total: 0 }),
+  getPipelineStats: vi.fn().mockResolvedValue({ stage_counts: {}, total: 0 }),
+  getPipelineUpdates: vi.fn().mockResolvedValue({ updates: [], total: 0 }),
+  createPipelineEntry: vi.fn(),
+  updatePipelineEntry: vi.fn(),
+  deletePipelineEntry: vi.fn(),
+  reorderPipelineEntries: vi.fn(),
+  // Pipeline sync
+  getGoogleTokenStatus: vi.fn().mockResolvedValue({ connected: false }),
+  storeGoogleTokens: vi.fn().mockResolvedValue(undefined),
+  deleteGoogleTokens: vi.fn(),
+  syncPipeline: vi.fn(),
+  applySyncSuggestions: vi.fn(),
 }));
 
 // ── Seed local mode so ModeSelectionPage is bypassed in all tests ─────────────

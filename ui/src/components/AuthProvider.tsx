@@ -8,6 +8,7 @@ import {
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
 import { useMode } from "@/contexts/ModeContext";
+import { storeGoogleTokens } from "@/lib/api";
 
 interface AuthState {
   user: User | null;
@@ -56,6 +57,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, s) => {
       setSession(s);
+      // Capture Google OAuth provider tokens for Gmail/Calendar integration
+      if (
+        s?.provider_token &&
+        s?.provider_refresh_token &&
+        _event === "SIGNED_IN"
+      ) {
+        storeGoogleTokens(s.provider_token, s.provider_refresh_token).catch(
+          () => {
+            // Non-blocking: token storage failure shouldn't break auth flow
+          },
+        );
+      }
     });
 
     return () => subscription.unsubscribe();
@@ -77,7 +90,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!supabase) return null;
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: window.location.origin },
+      options: {
+        redirectTo: window.location.origin,
+        scopes:
+          "https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/calendar.events.readonly",
+        queryParams: {
+          access_type: "offline",
+          prompt: "consent",
+        },
+      },
     });
     return error ? error.message : null;
   };

@@ -622,6 +622,105 @@ export async function getPipelineStats(): Promise<PipelineStats> {
   return data;
 }
 
+// ─── Google Integration ─────────────────────────────────────────────────────
+
+export async function getGoogleTokenStatus(): Promise<{ connected: boolean }> {
+  const { data } = await api.get("/settings/google-tokens");
+  return data;
+}
+
+export async function storeGoogleTokens(
+  accessToken: string,
+  refreshToken: string,
+): Promise<void> {
+  await api.post("/settings/google-tokens", {
+    access_token: accessToken,
+    refresh_token: refreshToken,
+  });
+}
+
+export async function deleteGoogleTokens(): Promise<void> {
+  await api.delete("/settings/google-tokens");
+}
+
+// ─── Pipeline Sync ──────────────────────────────────────────────────────────
+
+export interface GmailSignal {
+  company_name: string;
+  signal_type: string;
+  subject: string;
+  snippet: string;
+  date: string;
+  is_new_company: boolean;
+}
+
+export interface CalendarSignal {
+  company_name: string | null;
+  event_type: string;
+  title: string;
+  start_time: string;
+  end_time: string;
+  organizer: string | null;
+  status: string;
+}
+
+export interface PipelineSuggestion {
+  id: string;
+  entry_id: string | null;
+  company_name: string;
+  suggested_stage: string | null;
+  suggested_badge: string | null;
+  suggested_next_action: string | null;
+  reason: string;
+  confidence: string;
+  source: string;
+}
+
+export interface SyncResult {
+  gmail_signals: GmailSignal[];
+  calendar_signals: CalendarSignal[];
+  suggestions: PipelineSuggestion[];
+  new_companies: PipelineSuggestion[];
+  summary: string | null;
+  google_connected: boolean;
+  llm_available: boolean;
+}
+
+export async function syncPipeline(
+  modelProvider?: string,
+): Promise<SyncResult> {
+  const { data } = await api.post("/pipeline/sync", {
+    ...(modelProvider ? { model_provider: modelProvider } : {}),
+  });
+  return data;
+}
+
+export async function applySyncSuggestions(
+  suggestions: PipelineSuggestion[],
+  newCompanies: PipelineSuggestion[],
+): Promise<{ applied: number; created: number }> {
+  const { data } = await api.post("/pipeline/sync/apply", {
+    suggestions: suggestions.map((s) => ({
+      entry_id: s.entry_id,
+      company_name: s.company_name,
+      suggested_stage: s.suggested_stage,
+      suggested_badge: s.suggested_badge,
+      suggested_next_action: s.suggested_next_action,
+      reason: s.reason,
+      source: s.source,
+    })),
+    new_companies: newCompanies.map((c) => ({
+      entry_id: null,
+      company_name: c.company_name,
+      suggested_stage: c.suggested_stage,
+      suggested_next_action: c.suggested_next_action,
+      reason: c.reason,
+      source: c.source,
+    })),
+  });
+  return data;
+}
+
 // ─── Browser Agent ───────────────────────────────────────────────────────────
 
 /** Send a kill signal to a running browser agent. */

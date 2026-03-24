@@ -4,7 +4,7 @@
     {
       "name": "ui-dev",
       "runtimeExecutable": "/bin/bash",
-      "runtimeArgs": ["-c", "export NVM_DIR=\"$HOME/.nvm\" && source \"$NVM_DIR/nvm.sh\" && nvm use 20 && pnpm --dir /Users/sakshambhatla/workplace/JobFinder-agent2/ui dev"],
+      "runtimeArgs": ["-c", "export NVM_DIR=\"$HOME/.nvm\" && source \"$NVM_DIR/nvm.sh\" && nvm use 20 && pnpm --dir /Users/sakshambhatla/workplace/JobFinder/ui dev"],
       "port": 5173
     },
     {
@@ -16,7 +16,7 @@
     {
       "name": "api-dev",
       "runtimeExecutable": "/bin/bash",
-      "runtimeArgs": ["-c", "source /Users/sakshambhatla/workplace/JobFinder/.venv/bin/activate && cd /Users/sakshambhatla/workplace/JobFinder-agent2 && pip install -e . -q && jobfinder serve --reload"],
+      "runtimeArgs": ["-c", "source /Users/sakshambhatla/workplace/JobFinder/.venv/bin/activate && cd /Users/sakshambhatla/workplace/JobFinder && pip install -e . -q && jobfinder serve --reload"],
       "port": 8000
     }
   ]

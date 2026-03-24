@@ -73,3 +73,22 @@ class ReorderPipelineRequest(BaseModel):
 class CreatePipelineUpdateRequest(BaseModel):
     entry_id: str
     message: str
+
+
+class PipelineSyncRequest(BaseModel):
+    model_provider: str | None = None  # override LLM provider for reasoning
+
+
+class SyncSuggestionApply(BaseModel):
+    entry_id: str | None = None
+    company_name: str
+    suggested_stage: str | None = None
+    suggested_badge: str | None = None
+    suggested_next_action: str | None = None
+    reason: str = ""
+    source: str = "llm"
+
+
+class ApplySyncSuggestionsRequest(BaseModel):
+    suggestions: list[SyncSuggestionApply] = []  # accepted updates to existing entries
+    new_companies: list[SyncSuggestionApply] = []  # accepted new companies to add

@@ -1,6 +1,6 @@
 [project]
 name = "jobfinder"
-version = "5.0.0"
+version = "5.1.0"
 description = "CLI tool to discover relevant companies and open roles from your resume"
 requires-python = ">=3.10"
 dependencies = [
@@ -20,6 +20,8 @@ dependencies = [
     "pyjwt[crypto]>=2.0",
     "pydantic[email]>=2.0",
     "resend>=2.0",
+    "google-auth>=2.0",
+    "google-api-python-client>=2.0",
 ]
 
 [project.optional-dependencies]

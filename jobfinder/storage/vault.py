@@ -72,6 +72,70 @@ def delete_api_key(user_id: str, provider: str) -> None:
         raise
 
 
+# ── Google OAuth tokens ────────────────────────────────────────────────────
+
+
+def store_google_tokens(user_id: str, access_token: str, refresh_token: str) -> None:
+    """Encrypt and store Google OAuth tokens for *user_id*."""
+    client = _supabase_client()
+    try:
+        client.rpc(
+            "store_google_tokens",
+            {"p_user_id": user_id, "p_access_token": access_token, "p_refresh_token": refresh_token},
+        ).execute()
+    except Exception as exc:
+        if _is_vault_missing(exc):
+            raise RuntimeError(
+                "Google token vault functions are not installed. "
+                "Run: python scripts/apply_vault_migration.py supabase/migrations/20240101000013_google_tokens.sql"
+            ) from exc
+        raise
+
+
+def get_google_tokens(user_id: str) -> dict[str, str] | None:
+    """Return ``{"access_token": ..., "refresh_token": ...}`` or ``None``."""
+    client = _supabase_client()
+    try:
+        resp = client.rpc(
+            "get_google_tokens",
+            {"p_user_id": user_id},
+        ).execute()
+        return resp.data if isinstance(resp.data, dict) else None
+    except Exception as exc:
+        if _is_vault_missing(exc):
+            return None
+        raise
+
+
+def delete_google_tokens(user_id: str) -> None:
+    """Remove stored Google OAuth tokens for *user_id*."""
+    client = _supabase_client()
+    try:
+        client.rpc(
+            "delete_google_tokens",
+            {"p_user_id": user_id},
+        ).execute()
+    except Exception as exc:
+        if _is_vault_missing(exc):
+            return
+        raise
+
+
+def has_google_tokens(user_id: str) -> bool:
+    """Return True if the user has stored Google OAuth tokens."""
+    client = _supabase_client()
+    try:
+        resp = client.rpc(
+            "has_google_tokens",
+            {"p_user_id": user_id},
+        ).execute()
+        return bool(resp.data)
+    except Exception as exc:
+        if _is_vault_missing(exc):
+            return False
+        raise
+
+
 def has_api_keys(user_id: str) -> dict[str, bool]:
     """Return ``{"anthropic": bool, "gemini": bool}`` without decrypting."""
     client = _supabase_client()

@@ -15,6 +15,11 @@ class StoreApiKeyRequest(BaseModel):
     api_key: str
 
 
+class StoreGoogleTokensRequest(BaseModel):
+    access_token: str
+    refresh_token: str
+
+
 @router.get("/settings/api-keys")
 async def get_api_key_status(
     _auth: tuple[str, str] | None = Depends(get_current_user),
@@ -108,6 +113,60 @@ async def delete_api_key_endpoint(
 
     delete_api_key(user_id, provider)
     return {"status": "deleted", "provider": provider}
+
+
+# ── Google OAuth tokens ────────────────────────────────────────────────────
+
+
+@router.get("/settings/google-tokens")
+async def get_google_token_status(
+    _auth: tuple[str, str] | None = Depends(get_current_user),
+) -> dict:
+    """Return whether the user has stored Google OAuth tokens (never values)."""
+    user_id = _auth[0] if _auth else None
+    if not user_id or not os.environ.get("SUPABASE_URL"):
+        return {"connected": False}
+
+    from jobfinder.storage.vault import has_google_tokens
+
+    return {"connected": has_google_tokens(user_id)}
+
+
+@router.post("/settings/google-tokens")
+async def store_google_tokens_endpoint(
+    req: StoreGoogleTokensRequest,
+    _auth: tuple[str, str] | None = Depends(get_current_user),
+) -> dict:
+    """Store Google OAuth tokens (access + refresh) in encrypted Vault."""
+    user_id = _auth[0] if _auth else None
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required.")
+    if not os.environ.get("SUPABASE_URL"):
+        raise HTTPException(status_code=400, detail="Token storage requires managed mode (Supabase).")
+    if not req.access_token.strip() or not req.refresh_token.strip():
+        raise HTTPException(status_code=400, detail="Both access_token and refresh_token are required.")
+
+    from jobfinder.storage.vault import store_google_tokens
+
+    store_google_tokens(user_id, req.access_token.strip(), req.refresh_token.strip())
+    return {"status": "stored"}
+
+
+@router.delete("/settings/google-tokens")
+async def delete_google_tokens_endpoint(
+    _auth: tuple[str, str] | None = Depends(get_current_user),
+) -> dict:
+    """Remove stored Google OAuth tokens."""
+    user_id = _auth[0] if _auth else None
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required.")
+    if not os.environ.get("SUPABASE_URL"):
+        raise HTTPException(status_code=400, detail="Token storage requires managed mode (Supabase).")
+
+    from jobfinder.storage.vault import delete_google_tokens
+
+    delete_google_tokens(user_id)
+    return {"status": "deleted"}
 
 
 async def _validate_key(provider: str, api_key: str) -> None:

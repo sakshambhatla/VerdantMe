@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+import os
 import uuid
 from datetime import datetime, timezone
 
@@ -7,8 +9,10 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from jobfinder.api.auth import get_current_user
 from jobfinder.api.models import (
+    ApplySyncSuggestionsRequest,
     CreatePipelineEntryRequest,
     CreatePipelineUpdateRequest,
+    PipelineSyncRequest,
     ReorderPipelineRequest,
     UpdatePipelineEntryRequest,
 )
@@ -284,3 +288,173 @@ async def get_pipeline_stats(
         s = e.get("stage", "not_started")
         counts[s] = counts.get(s, 0) + 1
     return {"stage_counts": counts, "total": len(entries)}
+
+
+# ── Sync (Gmail + Calendar + LLM) ────────────────────────────────────────────
+
+
+@router.post("/pipeline/sync")
+async def sync_pipeline(
+    req: PipelineSyncRequest | None = None,
+    _auth: tuple[str, str] | None = Depends(get_current_user),
+) -> dict:
+    """Sync pipeline with external sources (Gmail, Calendar) and run LLM reasoning.
+
+    Returns signals and suggestions for the user to review before applying.
+    """
+    user_id, jwt_token = _auth if _auth else (None, None)
+    store = get_storage_backend(user_id, jwt_token)
+    entries: list[dict] = store.read("pipeline_entries.json") or []
+
+    google_connected = False
+    gmail_signals: list[dict] = []
+    calendar_signals: list[dict] = []
+
+    # ── Gmail + Calendar scan (requires Google tokens) ────────────────────
+    if user_id and os.environ.get("SUPABASE_URL"):
+        from jobfinder.storage.vault import get_google_tokens
+
+        tokens = get_google_tokens(user_id)
+        if tokens and tokens.get("refresh_token"):
+            google_connected = True
+
+            from jobfinder.pipeline.gmail import scan_gmail
+            from jobfinder.pipeline.calendar import scan_calendar
+
+            raw_gmail = await asyncio.to_thread(scan_gmail, tokens, entries)
+            gmail_signals = [s.to_dict() for s in raw_gmail]
+
+            raw_calendar = await asyncio.to_thread(scan_calendar, tokens, entries)
+            calendar_signals = [s.to_dict() for s in raw_calendar]
+
+    # ── LLM reasoning (requires user's API key) ──────────────────────────
+    llm_available = False
+    suggestions: list[dict] = []
+    new_companies: list[dict] = []
+    summary: str | None = None
+
+    if gmail_signals or calendar_signals:
+        from jobfinder.config import load_config, resolve_api_key
+
+        overrides: dict = {}
+        if req and req.model_provider:
+            overrides["model_provider"] = req.model_provider
+        config = load_config(**overrides)
+
+        try:
+            api_key = resolve_api_key(config.model_provider, user_id)
+            llm_available = True
+
+            from jobfinder.pipeline.reasoning import reason_pipeline
+
+            result = await asyncio.to_thread(
+                reason_pipeline,
+                entries,
+                gmail_signals,
+                calendar_signals,
+                api_key,
+                config.model_provider,
+            )
+            suggestions = [s.to_dict() for s in result.suggestions]
+            new_companies = [c.to_dict() for c in result.new_companies]
+            summary = result.summary
+        except ValueError:
+            pass  # No API key configured — skip LLM reasoning
+
+    return {
+        "gmail_signals": gmail_signals,
+        "calendar_signals": calendar_signals,
+        "suggestions": suggestions,
+        "new_companies": new_companies,
+        "summary": summary,
+        "google_connected": google_connected,
+        "llm_available": llm_available,
+    }
+
+
+@router.post("/pipeline/sync/apply")
+async def apply_sync_suggestions(
+    req: ApplySyncSuggestionsRequest,
+    _auth: tuple[str, str] | None = Depends(get_current_user),
+) -> dict:
+    """Apply accepted sync suggestions to the pipeline.
+
+    The frontend sends the full suggestion data (cached from the sync response)
+    for each suggestion the user approved.
+    """
+    user_id, jwt_token = _auth if _auth else (None, None)
+    store = get_storage_backend(user_id, jwt_token)
+    entries: list[dict] = store.read("pipeline_entries.json") or []
+    updates: list[dict] = store.read("pipeline_updates.json") or []
+    now = datetime.now(timezone.utc).isoformat()
+
+    applied = 0
+    created = 0
+
+    # Build entry lookup by ID
+    entry_map = {e["id"]: e for e in entries}
+
+    # ── Apply updates to existing entries ─────────────────────────────────
+    for suggestion in req.suggestions:
+        if not suggestion.entry_id or suggestion.entry_id not in entry_map:
+            continue
+
+        entry = entry_map[suggestion.entry_id]
+        old_stage = entry.get("stage")
+
+        if suggestion.suggested_stage and suggestion.suggested_stage != old_stage:
+            entry["stage"] = suggestion.suggested_stage
+            updates.insert(0, {
+                "id": str(uuid.uuid4()),
+                "entry_id": entry["id"],
+                "update_type": "stage_change",
+                "from_stage": old_stage,
+                "to_stage": suggestion.suggested_stage,
+                "message": f"{entry.get('company_name', '')} → {suggestion.suggested_stage} ({suggestion.source}: {suggestion.reason})",
+                "created_at": now,
+            })
+
+        if suggestion.suggested_badge is not None:
+            entry["badge"] = suggestion.suggested_badge or None
+        if suggestion.suggested_next_action:
+            entry["next_action"] = suggestion.suggested_next_action
+
+        entry["updated_at"] = now
+        applied += 1
+
+    # ── Create new pipeline entries ───────────────────────────────────────
+    for new_co in req.new_companies:
+        stage = new_co.suggested_stage or "not_started"
+        stage_entries = [e for e in entries if e.get("stage") == stage]
+        max_order = max((e.get("sort_order", 0) for e in stage_entries), default=-1)
+
+        new_entry = {
+            "id": str(uuid.uuid4()),
+            "company_name": new_co.company_name,
+            "role_title": None,
+            "stage": stage,
+            "note": f"Detected via {new_co.source}: {new_co.reason}",
+            "next_action": new_co.suggested_next_action,
+            "badge": "new",
+            "tags": [],
+            "sort_order": max_order + 1,
+            "created_at": now,
+            "updated_at": now,
+        }
+        entries.append(new_entry)
+
+        updates.insert(0, {
+            "id": str(uuid.uuid4()),
+            "entry_id": new_entry["id"],
+            "update_type": "created",
+            "from_stage": None,
+            "to_stage": stage,
+            "message": f"Added {new_co.company_name} (detected via {new_co.source})",
+            "created_at": now,
+        })
+        created += 1
+
+    store.write("pipeline_entries.json", entries)
+    store.write("pipeline_updates.json", updates)
+
+    return {"applied": applied, "created": created}
