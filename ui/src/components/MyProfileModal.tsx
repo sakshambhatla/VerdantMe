@@ -88,7 +88,7 @@ export function MyProfileModal({ open, onOpenChange, onSave }: MyProfileModalPro
         .from("profiles")
         .select("display_name, avatar_url")
         .eq("id", user.id)
-        .single()
+        .maybeSingle()
         .then(({ data }) => {
           if (!data) return;
           setProfile((prev) => ({

@@ -40,3 +40,11 @@ Google only returns a `refresh_token` on the very first consent. If the user has
 
 **Issue 5 — Scopes must also be registered in Google Cloud Console**
 Any OAuth scope requested in code must also be listed in the OAuth consent screen configuration in Google Cloud Console (APIs & Services → OAuth consent screen → Scopes). If a scope is requested but not registered, Google may silently ignore it or show a warning. Make sure `gmail.readonly` and `calendar.events.readonly` are both listed there.
+
+---
+
+### 2026-03-24 Supabase Vault migrations must be applied manually
+
+**Context**: Adding any new SECURITY DEFINER vault function (e.g., Google token storage in migration 013).
+**Issue**: There is no automated migration pipeline for Supabase. The `apply_vault_migration.py` script is hardcoded to migration 003, there's no `psql` or `supabase` CLI on the dev machine, and Render's deploy command doesn't run migrations. New vault functions are written to `supabase/migrations/` and pass CI (tests mock the DB), but fail at runtime in production because the SQL was never executed against the actual database.
+**Fix/Lesson**: After creating any new vault migration file, you must manually paste the SQL into the Supabase SQL Editor (Dashboard → SQL Editor → New Query). This is a known limitation tracked in `todo/vault-migration-automation.md`. The runtime error looks like `RuntimeError: ... vault functions are not installed` and surfaces as a generic "Network Error" or 500 to the user.
