@@ -1,4 +1,5 @@
 import { useState, useEffect, useLayoutEffect, useRef } from "react";
+import { Link } from "react-router-dom";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ResumeTab } from "@/components/ResumeTab";
 import { CompaniesTab } from "@/components/CompaniesTab";
@@ -134,12 +135,14 @@ function App() {
             }}
           >
             <div className="py-7 text-center">
-              <h1
-                className="text-5xl font-black tracking-tight text-white leading-none"
-                style={{ fontFamily: "var(--font-display)" }}
-              >
-                Verdant AI
-              </h1>
+              <Link to="/" className="no-underline">
+                <h1
+                  className="text-5xl font-black tracking-tight text-white leading-none hover:opacity-80 transition-opacity"
+                  style={{ fontFamily: "var(--font-display)" }}
+                >
+                  Verdant AI
+                </h1>
+              </Link>
               <p className="mt-2 text-sm" style={{ color: "rgba(255,255,255,0.50)" }}>
                 Discover companies and roles matched to your resume
               </p>
@@ -154,8 +157,9 @@ function App() {
             <div className="flex items-center px-6">
               {/* Left: compact logo — slides in when scrolled */}
               <div className="flex items-center" style={{ minWidth: "36px" }}>
-                <span
-                  className="font-black text-white"
+                <Link
+                  to="/"
+                  className="no-underline font-black text-white hover:opacity-80 transition-opacity"
                   style={{
                     fontFamily: "var(--font-display)",
                     fontSize: "1.25rem",
@@ -168,7 +172,7 @@ function App() {
                   }}
                 >
                   Verdant AI
-                </span>
+                </Link>
               </div>
 
               {/* Center: tabs — always visually centered */}
