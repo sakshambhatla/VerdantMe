@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useState, useEffect, useRef, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import axios from "axios";
 
@@ -11,6 +11,45 @@ export function LandingPage() {
     "idle" | "loading" | "success" | "duplicate" | "error"
   >("idle");
   const [waitlistMsg, setWaitlistMsg] = useState("");
+
+  // Typewriter animation
+  const typewriterText = "Show me remote lead design roles with series A startups.";
+  const [displayedText, setDisplayedText] = useState("");
+  const [showCursor, setShowCursor] = useState(true);
+  const typewriterRef = useRef<HTMLDivElement>(null);
+  const hasStartedTyping = useRef(false);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting && !hasStartedTyping.current) {
+          hasStartedTyping.current = true;
+          let index = 0;
+          const interval = setInterval(() => {
+            index++;
+            setDisplayedText(typewriterText.slice(0, index));
+            if (index >= typewriterText.length) {
+              clearInterval(interval);
+            }
+          }, 60);
+        }
+      },
+      { threshold: 0.5 }
+    );
+
+    if (typewriterRef.current) {
+      observer.observe(typewriterRef.current);
+    }
+
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    const cursorInterval = setInterval(() => {
+      setShowCursor((prev) => !prev);
+    }, 530);
+    return () => clearInterval(cursorInterval);
+  }, []);
 
   async function handleWaitlist(e: FormEvent) {
     e.preventDefault();
@@ -193,10 +232,20 @@ export function LandingPage() {
                   Talk to your career portal like a human. Just say: "Find me senior dev roles in San Francisco that pay over $200k."
                 </p>
                 <div
+                  ref={typewriterRef}
                   className="p-4 rounded-lg font-label text-xs italic"
-                  style={{ background: "rgba(0,0,0,0.5)", border: "1px solid rgba(255,255,255,0.05)", color: "#40ceed" }}
+                  style={{ background: "rgba(0,0,0,0.5)", border: "1px solid rgba(255,255,255,0.05)", color: "#40ceed", minHeight: "2.5rem" }}
                 >
-                  "Show me remote lead design roles with series A startups."
+                  &ldquo;{displayedText}
+                  <span
+                    className="inline-block w-[1px] h-[1em] align-middle ml-[1px]"
+                    style={{
+                      background: "#40ceed",
+                      opacity: showCursor ? 1 : 0,
+                      transition: "opacity 0.1s",
+                    }}
+                  />
+                  &rdquo;
                 </div>
               </div>
 
@@ -231,7 +280,7 @@ export function LandingPage() {
                       {["#a3a6ff", "#53ddfc", "#d7d4f0"].map((color, i) => (
                         <div key={i} className="flex items-center gap-1.5">
                           <div className="w-2 h-2 rounded-full" style={{ background: "#10b981", boxShadow: "0 0 8px rgba(16,185,129,0.5)" }} />
-                          <span className="text-xl" style={{ color }}>{["&#x2709;", "&#x1F4C5;", "&#x1F4DD;"][i]}</span>
+                          <span className="text-xl" style={{ color }}>{["✉️", "📅", "📝"][i]}</span>
                         </div>
                       ))}
                     </div>
