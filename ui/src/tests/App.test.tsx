@@ -148,10 +148,10 @@ describe("App profile menu", () => {
 // ── Job Pipeline page ─────────────────────────────────────────────────────
 
 describe("Job Pipeline page", () => {
-  it("renders pipeline placeholder at /app/pipeline", () => {
+  it("renders pipeline page at /app/pipeline", () => {
     renderApp("/app/pipeline");
-    expect(screen.getByRole("heading", { name: /Job Pipeline/i })).toBeInTheDocument();
-    expect(screen.getByText(/Coming soon/i)).toBeInTheDocument();
+    // The page shows a loading spinner while fetching pipeline data
+    expect(screen.getByText(/Loading pipeline/i)).toBeInTheDocument();
   });
 
   it("renders the Pipeline nav button", () => {
