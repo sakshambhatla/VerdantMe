@@ -38,7 +38,7 @@ export function ProfileMenu() {
       .from("profiles")
       .select("avatar_url")
       .eq("id", user.id)
-      .single()
+      .maybeSingle()
       .then(({ data }) => { if (data?.avatar_url) setRemoteAvatarUrl(data.avatar_url); });
   }, [mode, user]);
 

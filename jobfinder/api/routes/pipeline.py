@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
+
+log = logging.getLogger(__name__)
 
 from jobfinder.api.auth import get_current_user
 from jobfinder.api.models import (
@@ -334,32 +337,57 @@ async def sync_pipeline(
     summary: str | None = None
 
     if gmail_signals or calendar_signals:
-        from jobfinder.config import load_config, resolve_api_key
+        from jobfinder.config import SUPPORTED_PROVIDERS, load_config, resolve_api_key
 
         overrides: dict = {}
         if req and req.model_provider:
             overrides["model_provider"] = req.model_provider
         config = load_config(**overrides)
 
-        try:
-            api_key = resolve_api_key(config.model_provider, user_id)
-            llm_available = True
+        # Try preferred provider first, then all others
+        providers_to_try = [config.model_provider] + [
+            p for p in SUPPORTED_PROVIDERS if p != config.model_provider
+        ]
+        for provider in providers_to_try:
+            try:
+                api_key = resolve_api_key(provider, user_id)
+                llm_available = True
+                log.info("Pipeline sync: using %s for LLM reasoning", provider)
 
-            from jobfinder.pipeline.reasoning import reason_pipeline
+                from jobfinder.pipeline.reasoning import reason_pipeline
 
-            result = await asyncio.to_thread(
-                reason_pipeline,
-                entries,
-                gmail_signals,
-                calendar_signals,
-                api_key,
-                config.model_provider,
+                result = await asyncio.to_thread(
+                    reason_pipeline,
+                    entries,
+                    gmail_signals,
+                    calendar_signals,
+                    api_key,
+                    provider,
+                )
+                suggestions = [s.to_dict() for s in result.suggestions]
+                new_companies = [c.to_dict() for c in result.new_companies]
+                summary = result.summary
+                log.info(
+                    "Pipeline sync: LLM returned %d suggestions, %d new companies",
+                    len(suggestions), len(new_companies),
+                )
+                break
+            except ValueError:
+                log.info("Pipeline sync: no %s API key for user %s", provider, user_id)
+
+        # ── Rule-based fallback (when LLM unavailable or returned nothing) ──
+        if not suggestions and not new_companies:
+            from jobfinder.pipeline.reasoning import rule_based_suggestions
+
+            fallback = rule_based_suggestions(gmail_signals, calendar_signals, entries)
+            suggestions = [s.to_dict() for s in fallback.suggestions]
+            new_companies = [c.to_dict() for c in fallback.new_companies]
+            if not summary:
+                summary = fallback.summary
+            log.info(
+                "Pipeline sync: rule-based fallback generated %d suggestions, %d new companies",
+                len(suggestions), len(new_companies),
             )
-            suggestions = [s.to_dict() for s in result.suggestions]
-            new_companies = [c.to_dict() for c in result.new_companies]
-            summary = result.summary
-        except ValueError:
-            pass  # No API key configured — skip LLM reasoning
 
     return {
         "gmail_signals": gmail_signals,
