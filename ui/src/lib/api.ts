@@ -631,7 +631,7 @@ export async function getGoogleTokenStatus(): Promise<{ connected: boolean }> {
 
 export async function storeGoogleTokens(
   accessToken: string,
-  refreshToken: string,
+  refreshToken: string = "",
 ): Promise<void> {
   await api.post("/settings/google-tokens", {
     access_token: accessToken,
