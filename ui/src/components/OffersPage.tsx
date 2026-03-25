@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import {
@@ -24,30 +24,37 @@ function OfferCompanyCard({
   onAnalyze,
   onSaveContext,
   isAnalyzing,
+  analyzeError,
 }: {
   entry: PipelineEntry;
   analysis: OfferAnalysis | undefined;
   onAnalyze: (companyName: string, context: string) => void;
   onSaveContext: (companyName: string, context: string) => void;
   isAnalyzing: boolean;
+  analyzeError: string | null;
 }) {
   const [expanded, setExpanded] = useState(!!analysis?.dimensions?.length);
   const [context, setContext] = useState(analysis?.personal_context ?? "");
-  const [dirty, setDirty] = useState(false);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const debouncedSave = useCallback(
+    (val: string) => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      debounceRef.current = setTimeout(() => {
+        onSaveContext(entry.company_name, val);
+      }, 1000);
+    },
+    [entry.company_name, onSaveContext],
+  );
 
   const handleContextChange = (val: string) => {
     setContext(val);
-    setDirty(true);
-  };
-
-  const handleSave = () => {
-    onSaveContext(entry.company_name, context);
-    setDirty(false);
+    debouncedSave(val);
   };
 
   const handleAnalyze = () => {
-    // Auto-save context before analyzing
-    if (dirty) onSaveContext(entry.company_name, context);
+    // Flush any pending debounce
+    if (debounceRef.current) clearTimeout(debounceRef.current);
     onAnalyze(entry.company_name, context);
     setExpanded(true);
   };
@@ -106,7 +113,7 @@ function OfferCompanyCard({
               rows={4}
               className="w-full rounded-lg border bg-white/[0.03] border-white/10 text-sm text-white/80 placeholder:text-white/20 p-3 resize-y focus:outline-none focus:border-white/25"
             />
-            <div className="flex items-center gap-2 mt-2">
+            <div className="mt-2">
               <Button
                 onClick={handleAnalyze}
                 disabled={isAnalyzing}
@@ -115,16 +122,10 @@ function OfferCompanyCard({
                 {isAnalyzing && (
                   <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
                 )}
-                {analysis?.dimensions?.length ? "Re-analyze" : "Analyze Company"}
+                {analysis?.dimensions?.length ? "Refresh insights" : "Get me Offer insights"}
               </Button>
-              {dirty && (
-                <Button
-                  onClick={handleSave}
-                  variant="ghost"
-                  className="text-white/40 hover:text-white/60 text-sm"
-                >
-                  Save context
-                </Button>
+              {analyzeError && (
+                <p className="text-sm text-rose-400 mt-2">{analyzeError}</p>
               )}
             </div>
           </div>
@@ -142,6 +143,7 @@ function OfferCompanyCard({
 export function OffersPage() {
   const qc = useQueryClient();
   const [analyzingCompany, setAnalyzingCompany] = useState<string | null>(null);
+  const [analyzeError, setAnalyzeError] = useState<string | null>(null);
 
   const { data: entriesData, isLoading: loadingEntries } = useQuery({
     queryKey: ["offer-entries"],
@@ -163,23 +165,30 @@ export function OffersPage() {
       companyName: string;
       personalContext: string;
     }) => analyzeOffer(companyName, personalContext),
-    onMutate: ({ companyName }) => setAnalyzingCompany(companyName),
+    onMutate: ({ companyName }) => {
+      setAnalyzingCompany(companyName);
+      setAnalyzeError(null);
+    },
+    onError: (err: unknown) => {
+      const detail =
+        (err as { response?: { data?: { detail?: string } } })?.response?.data
+          ?.detail ?? "Analysis failed — check your API key and try again.";
+      setAnalyzeError(detail);
+    },
     onSettled: () => {
       setAnalyzingCompany(null);
       qc.invalidateQueries({ queryKey: ["offer-analyses"] });
     },
   });
 
-  const saveContextMutation = useMutation({
-    mutationFn: ({
-      companyName,
-      personalContext,
-    }: {
-      companyName: string;
-      personalContext: string;
-    }) => saveOfferContext(companyName, personalContext),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["offer-analyses"] }),
-  });
+  const handleSaveContext = useCallback(
+    (companyName: string, personalContext: string) => {
+      saveOfferContext(companyName, personalContext).catch(() => {
+        /* silent — auto-save best-effort */
+      });
+    },
+    [],
+  );
 
   const entries = entriesData?.entries ?? [];
   const analyses = analysesData?.analyses ?? [];
@@ -244,13 +253,16 @@ export function OffersPage() {
                   personalContext: ctx,
                 })
               }
-              onSaveContext={(name, ctx) =>
-                saveContextMutation.mutate({
-                  companyName: name,
-                  personalContext: ctx,
-                })
-              }
+              onSaveContext={handleSaveContext}
               isAnalyzing={analyzingCompany === entry.company_name}
+              analyzeError={
+                analyzingCompany === null &&
+                analyzeError !== null &&
+                /* show error on the card that was just analyzed */
+                analyzeMutation.variables?.companyName === entry.company_name
+                  ? analyzeError
+                  : null
+              }
             />
           ))}
         </div>
