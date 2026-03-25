@@ -16,12 +16,17 @@ export const STAGE_META: Record<PipelineStage, StageMeta> = {
   rejected: { label: "Rejected", color: "#f43f5e", bgColor: "rgba(244,63,94,0.15)" },
 };
 
-/** Stages shown as Kanban columns (excludes backlog). */
+/** Stages shown as Kanban columns (active pipeline only). */
 export const BOARD_STAGES: PipelineStage[] = [
   "recruiter",
   "hm_screen",
   "onsite",
   "offer",
+];
+
+/** Stages shown as collapsible side sections below the board. */
+export const SIDE_STAGES: PipelineStage[] = [
+  "not_started",
   "blocked",
   "rejected",
 ];
@@ -29,7 +34,29 @@ export const BOARD_STAGES: PipelineStage[] = [
 export const ALL_STAGES: PipelineStage[] = [
   "not_started",
   ...BOARD_STAGES,
+  "blocked",
+  "rejected",
 ];
+
+/** Numeric ordering for stage progression (higher = further along). */
+export const STAGE_ORDER: Record<string, number> = {
+  not_started: 0,
+  recruiter: 1,
+  hm_screen: 2,
+  onsite: 3,
+  offer: 4,
+  blocked: -1,
+  rejected: -1,
+};
+
+/** Returns true when moving from `from` to `to` is a backward stage change. */
+export function isStageRegression(from: string, to: string): boolean {
+  const fromOrder = STAGE_ORDER[from] ?? -1;
+  const toOrder = STAGE_ORDER[to] ?? -1;
+  // Terminal stages (blocked/rejected) are not comparable
+  if (fromOrder < 0 || toOrder < 0) return false;
+  return toOrder < fromOrder;
+}
 
 export const BADGE_META: Record<PipelineBadge, { label: string; color: string }> = {
   done: { label: "Done", color: "#22c55e" },

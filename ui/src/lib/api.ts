@@ -697,6 +697,8 @@ export interface JobUpdate {
   // Back-reference to apply via existing backend
   entry_id: string | null;
   confidence: string;
+  // Current stage of the entry (null for new companies)
+  current_stage: string | null;
 }
 
 export interface SyncResult {
@@ -709,11 +711,17 @@ export interface SyncResult {
   llm_available: boolean;
 }
 
-export async function syncPipeline(
-  modelProvider?: string,
-): Promise<SyncResult> {
+export async function syncPipeline(params?: {
+  modelProvider?: string;
+  lookback_days?: number;
+  custom_phrases?: string[];
+}): Promise<SyncResult> {
   const { data } = await api.post("/pipeline/sync", {
-    ...(modelProvider ? { model_provider: modelProvider } : {}),
+    ...(params?.modelProvider ? { model_provider: params.modelProvider } : {}),
+    ...(params?.lookback_days ? { lookback_days: params.lookback_days } : {}),
+    ...(params?.custom_phrases?.length
+      ? { custom_phrases: params.custom_phrases }
+      : {}),
   });
   return data;
 }

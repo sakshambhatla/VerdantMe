@@ -10,10 +10,11 @@ import type {
   GmailSignal,
   CalendarSignal,
   PipelineSuggestion,
+  PipelineEntry,
   SyncResult,
   JobUpdate,
 } from "@/lib/api";
-import { STAGE_META, BADGE_META } from "./constants";
+import { STAGE_META, BADGE_META, isStageRegression } from "./constants";
 
 // ─── Conversion layer (swappable — today maps from PipelineSuggestion) ──────
 
@@ -31,7 +32,11 @@ function buildJobUpdates(
   newCompanies: PipelineSuggestion[],
   gmailSignals: GmailSignal[],
   calendarSignals: CalendarSignal[],
+  entries: PipelineEntry[],
 ): JobUpdate[] {
+  // Build entry lookup for current_stage
+  const entryById = new Map<string, PipelineEntry>();
+  for (const e of entries) entryById.set(e.id, e);
   const now = new Date().toISOString();
 
   // Index signals by company name (lowercase) for lookup
@@ -73,6 +78,7 @@ function buildJobUpdates(
       signal_date: gmail?.date || cal?.start_time || "",
       entry_id: s.entry_id,
       confidence: s.confidence,
+      current_stage: s.entry_id ? (entryById.get(s.entry_id)?.stage ?? null) : null,
     });
   }
 
@@ -96,6 +102,7 @@ function buildJobUpdates(
       signal_date: gmail?.date || "",
       entry_id: null,
       confidence: c.confidence,
+      current_stage: null,
     });
   }
 
@@ -117,6 +124,7 @@ function buildJobUpdates(
       signal_date: gmail.date,
       entry_id: null,
       confidence: "low",
+      current_stage: null,
     });
     covered.add(key);
   }
@@ -138,6 +146,7 @@ function buildJobUpdates(
       signal_date: cal.start_time,
       entry_id: null,
       confidence: "low",
+      current_stage: null,
     });
   }
 
@@ -150,6 +159,7 @@ interface PipelineSyncModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   syncResult: SyncResult | null;
+  entries: PipelineEntry[];
   onApply: (
     suggestions: PipelineSuggestion[],
     newCompanies: PipelineSuggestion[],
@@ -180,6 +190,7 @@ export default function PipelineSyncModal({
   open,
   onOpenChange,
   syncResult,
+  entries,
   onApply,
   applying,
 }: PipelineSyncModalProps) {
@@ -193,8 +204,9 @@ export default function PipelineSyncModal({
       syncResult.new_companies,
       syncResult.gmail_signals,
       syncResult.calendar_signals,
+      entries,
     );
-  }, [syncResult]);
+  }, [syncResult, entries]);
 
   // Reset overrides when modal opens with new data
   useEffect(() => {
@@ -386,6 +398,15 @@ function SyncRow({
 }) {
   const isIgnored = recommendation === "ignore";
   const stageMeta = STAGE_META[jobUpdate.stage as keyof typeof STAGE_META];
+  const currentStageMeta = jobUpdate.current_stage
+    ? STAGE_META[jobUpdate.current_stage as keyof typeof STAGE_META]
+    : null;
+  const regression = !!(
+    jobUpdate.current_stage &&
+    jobUpdate.stage &&
+    jobUpdate.current_stage !== jobUpdate.stage &&
+    isStageRegression(jobUpdate.current_stage, jobUpdate.stage)
+  );
   const badgeMeta = jobUpdate.badge
     ? BADGE_META[jobUpdate.badge as keyof typeof BADGE_META]
     : null;
@@ -465,17 +486,50 @@ function SyncRow({
           )}
         </div>
         {stageMeta && (
-          <div className="flex items-center gap-1 text-[10px]">
+          <div className="flex items-center gap-1 text-[10px] flex-wrap">
             <span className="text-white/40">Stage:</span>
-            <span
-              className="rounded-full px-1.5 py-0.5 font-medium"
-              style={{
-                backgroundColor: stageMeta.color + "15",
-                color: stageMeta.color,
-              }}
-            >
-              {stageMeta.label}
-            </span>
+            {currentStageMeta && currentStageMeta.label !== stageMeta.label ? (
+              <>
+                <span
+                  className="rounded-full px-1.5 py-0.5 font-medium"
+                  style={{
+                    backgroundColor: currentStageMeta.color + "15",
+                    color: currentStageMeta.color,
+                  }}
+                >
+                  {currentStageMeta.label}
+                </span>
+                <span className="text-white/30">&rarr;</span>
+                <span
+                  className="rounded-full px-1.5 py-0.5 font-medium"
+                  style={{
+                    backgroundColor: stageMeta.color + "15",
+                    color: regression ? "#f59e0b" : stageMeta.color,
+                    border: regression ? "1px solid rgba(245,158,11,0.4)" : undefined,
+                  }}
+                >
+                  {stageMeta.label}
+                </span>
+                {regression && (
+                  <span
+                    className="text-amber-400 text-[9px] font-semibold ml-0.5"
+                    title="This would move the entry to an earlier stage"
+                  >
+                    ⚠ backward
+                  </span>
+                )}
+              </>
+            ) : (
+              <span
+                className="rounded-full px-1.5 py-0.5 font-medium"
+                style={{
+                  backgroundColor: stageMeta.color + "15",
+                  color: stageMeta.color,
+                }}
+              >
+                {stageMeta.label}
+              </span>
+            )}
           </div>
         )}
         {jobUpdate.next_action && (
