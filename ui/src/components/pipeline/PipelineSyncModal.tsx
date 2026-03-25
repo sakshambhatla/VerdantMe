@@ -63,11 +63,14 @@ function buildJobUpdates(
     covered.add(key);
     const gmail = gmailByCompany.get(key);
     const cal = calByCompany.get(key);
+    // When suggested_stage is null (no stage change), keep the entry's current stage
+    const currentEntry = s.entry_id ? entryById.get(s.entry_id) : undefined;
+    const effectiveStage = s.suggested_stage || currentEntry?.stage || "not_started";
     updates.push({
       id: s.id,
       source: (s.source === "calendar" ? "calendar" : "gmail") as "gmail" | "calendar",
       company_name: s.company_name,
-      stage: s.suggested_stage || "not_started",
+      stage: effectiveStage,
       badge: s.suggested_badge || null,
       next_action: s.suggested_next_action || null,
       note: "",

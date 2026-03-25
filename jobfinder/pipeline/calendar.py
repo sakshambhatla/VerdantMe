@@ -33,6 +33,7 @@ _INTERVIEW_KEYWORDS = {
     "culture fit",
     "take-home",
     "assessment",
+    "call",
 }
 
 

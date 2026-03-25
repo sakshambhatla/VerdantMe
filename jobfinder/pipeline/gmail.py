@@ -1,10 +1,12 @@
 """Gmail integration for pipeline sync.
 
 Searches the user's Gmail for interview-related signals using stored
-Google OAuth tokens.  Three-pass search:
+Google OAuth tokens.  Multi-pass search:
   0. LinkedIn notification emails — InMails and connection messages
   1. Known companies — messages mentioning pipeline company names
   2. New company detection — broad recruiter/interview keyword search
+  3. Custom phrases (user-specified)
+  4. BrightHire — interview scheduling platform notifications
 """
 
 from __future__ import annotations
@@ -42,6 +44,23 @@ _LINKEDIN_SUBJECT_NAME_RE = re.compile(
     r"(?:(?:You have a new message from|New message from)\s+(.+?)(?:\s+on LinkedIn)?$)|"
     r"^(.+?)\s+(?:sent you a message|wants to connect|sent you an InMail)",
     re.IGNORECASE,
+)
+
+# Regex to extract the event title from a Gmail "unknown sender" calendar invite:
+# "Invitation from an unknown sender: <EVENT TITLE> @ <date/time> (<email>)"
+_UNKNOWN_INVITE_RE = re.compile(
+    r"invitation from an unknown sender[:\s]+(.+?)\s*@\s*\w{3}\s+\w{3}", re.IGNORECASE
+)
+
+# Patterns to extract company name from an event title string
+_EVENT_COMPANY_PATTERNS = [
+    re.compile(r"(?:interview|screen|call|chat)\s+(?:with|at|@)\s+(.+?)(?:\s*[-–—]|\s*$)", re.IGNORECASE),
+    re.compile(r"^(.+?)\s*[-–—]\s*(?:interview|screen|call|round|panel|recruiter|technical)", re.IGNORECASE),
+]
+
+# Common TLD-like suffixes that appear in company names (e.g. "Suno.ai", "Scale.co")
+_DOMAIN_SUFFIXES = re.compile(
+    r"\.(ai|io|co|com|org|net|dev|app|xyz|tech|so|gg|us|me)$", re.IGNORECASE
 )
 
 
@@ -108,8 +127,13 @@ def _extract_company_from_email(sender: str) -> str | None:
     match = re.search(r"@([\w.-]+)\.", sender)
     if match:
         domain = match.group(1).lower()
-        # Skip generic email providers
-        if domain in ("gmail", "yahoo", "hotmail", "outlook", "icloud", "protonmail", "aol"):
+        # Skip generic email providers and known system senders
+        if domain in (
+            "gmail", "yahoo", "hotmail", "outlook", "icloud", "protonmail", "aol",
+            "google",          # calendar-notification@google.com
+            "brighthire",      # handled separately in Pass 4
+            "linkedin", "greenhouse-mail", "lever", "ashbyhq", "myworkday",
+        ):
             return None
         return domain.replace("-", " ").title()
     return None
@@ -154,6 +178,31 @@ def _extract_linkedin_company(subject: str, snippet: str, known_companies: set[s
     return None
 
 
+def _extract_company_from_unknown_invite(subject: str) -> str | None:
+    """Parse a Gmail 'Invitation from an unknown sender' notification subject.
+
+    Extracts the calendar event title, then applies event-title patterns
+    to infer the company name (e.g. 'Interview with Suno @ ...' → 'Suno').
+    """
+    m = _UNKNOWN_INVITE_RE.search(subject)
+    if not m:
+        return None
+    event_title = m.group(1).strip()
+    for pattern in _EVENT_COMPANY_PATTERNS:
+        match = pattern.search(event_title)
+        if match:
+            return match.group(1).strip()
+    return None
+
+
+def _normalize_company_name(name: str) -> str:
+    """Strip domain-style suffixes from company names for better matching.
+
+    "Suno.ai" → "suno", "Scale.co" → "scale", "Adobe" → "adobe"
+    """
+    return _DOMAIN_SUFFIXES.sub("", name.lower()).strip()
+
+
 def scan_gmail(
     tokens: dict[str, str],
     pipeline_entries: list[dict],
@@ -177,6 +226,14 @@ def scan_gmail(
     known_companies = {e.get("company_name", "").lower() for e in pipeline_entries}
     known_companies.discard("")
 
+    # Build normalized variants (strip .ai/.io/.co etc.) for fuzzy matching
+    # Maps normalized → original lowercase name for reverse lookup
+    norm_to_original: dict[str, str] = {}
+    for name in known_companies:
+        norm = _normalize_company_name(name)
+        if norm and norm != name:
+            norm_to_original[norm] = name
+
     # ── Pass 0: LinkedIn notification emails ─────────────────────────────
     linkedin_signals = _search_and_extract_linkedin(service, since, known_companies)
     signals.extend(linkedin_signals)
@@ -184,13 +241,20 @@ def scan_gmail(
 
     # ── Pass 1: Known companies ──────────────────────────────────────────
     if known_companies:
-        company_names = list(known_companies)
+        # Build search terms: original names + normalized variants (deduped)
+        search_terms: set[str] = set(known_companies)
+        search_terms.update(norm_to_original.keys())
+        term_list = list(search_terms)
+
         # Gmail OR query has limits; batch if needed
-        for i in range(0, len(company_names), 20):
-            batch = company_names[i : i + 20]
+        for i in range(0, len(term_list), 20):
+            batch = term_list[i : i + 20]
             or_clause = " OR ".join(f'"{name}"' for name in batch)
             query = f"after:{since} ({or_clause})"
-            new_sigs = _search_and_extract(service, query, known_companies, is_new=False)
+            new_sigs = _search_and_extract(
+                service, query, known_companies, is_new=False,
+                norm_to_original=norm_to_original,
+            )
             # Skip any that were already captured as LinkedIn signals
             for sig in new_sigs:
                 if sig.company_name.lower() not in linkedin_companies:
@@ -217,11 +281,31 @@ def scan_gmail(
     if phrases:
         or_clause = " OR ".join(f'"{p}"' for p in phrases)
         phrase_query = f"after:{since} ({or_clause})"
-        phrase_signals = _search_and_extract(service, phrase_query, known_companies, is_new=True)
+        phrase_signals = _search_and_extract(
+            service, phrase_query, known_companies, is_new=True,
+            norm_to_original=norm_to_original,
+        )
         for sig in phrase_signals:
             if sig.company_name.lower() not in existing_names and sig.company_name.lower() not in known_companies:
                 signals.append(sig)
                 existing_names.add(sig.company_name.lower())
+
+    # ── Pass 4: BrightHire — interview scheduling platform ───────────────
+    # BrightHire (hello@brighthire.ai) sends notifications when an interview
+    # recording is set up; subject often contains the company name.
+    brighthire_query = f"after:{since} from:brighthire.ai"
+    brighthire_signals = _search_and_extract(
+        service, brighthire_query, known_companies, is_new=False,
+        norm_to_original=norm_to_original,
+    )
+    for sig in brighthire_signals:
+        # Override signal type — BrightHire always means a scheduled interview
+        sig.signal_type = "scheduling"
+        key = sig.company_name.lower()
+        if key not in existing_names:
+            sig.is_new_company = key not in known_companies
+            signals.append(sig)
+            existing_names.add(key)
 
     return signals
 
@@ -302,9 +386,12 @@ def _search_and_extract(
     known_companies: set[str],
     is_new: bool,
     max_results: int = 30,
+    norm_to_original: dict[str, str] | None = None,
 ) -> list[GmailSignal]:
     """Execute a Gmail search and extract signals from results."""
     signals: list[GmailSignal] = []
+    norm_map = norm_to_original or {}
+
     try:
         results = (
             service.users()
@@ -334,20 +421,33 @@ def _search_and_extract(
         sender = headers.get("from", "")
         date_str = headers.get("date", "")
         snippet = msg.get("snippet", "")
+        text_lower = f"{subject} {snippet} {sender}".lower()
 
         # Skip LinkedIn emails here — handled in Pass 0
         if _is_linkedin_sender(sender):
             continue
 
-        # Try to match to a known company
+        # Try to match to a known company (exact name first)
         company_name = None
         for name in known_companies:
-            if name in subject.lower() or name in snippet.lower() or name in sender.lower():
+            if name in text_lower:
                 company_name = name.title()
                 break
 
+        # Fallback: try normalized names (e.g. "suno" matches for pipeline entry "Suno.ai")
+        if not company_name and norm_map:
+            for norm, original in norm_map.items():
+                if norm in text_lower:
+                    company_name = original.title()
+                    break
+
         if not company_name:
             company_name = _extract_company_from_email(sender)
+
+        # Handle Gmail "Invitation from an unknown sender" calendar notifications
+        # (sender is calendar-notification@google.com; company is in the event title)
+        if not company_name and "invitation from an unknown sender" in subject.lower():
+            company_name = _extract_company_from_unknown_invite(subject)
 
         if not company_name:
             continue
