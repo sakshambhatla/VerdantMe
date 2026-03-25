@@ -113,11 +113,26 @@ export default function PipelineSyncModal({
           </span>
           {google_connected && (
             <>
+              {(() => {
+                const linkedinCount = gmail_signals.filter(s => s.source === "linkedin").length;
+                const gmailCount = gmail_signals.length - linkedinCount;
+                return (
+                  <>
+                    {gmailCount > 0 && (
+                      <span className="px-2 py-0.5 rounded-full bg-white/10 text-white/50">
+                        {gmailCount} email signal{gmailCount !== 1 ? "s" : ""}
+                      </span>
+                    )}
+                    {linkedinCount > 0 && (
+                      <span className="px-2 py-0.5 rounded-full bg-[#0A66C2]/20 text-[#4899f0]">
+                        {linkedinCount} LinkedIn signal{linkedinCount !== 1 ? "s" : ""}
+                      </span>
+                    )}
+                  </>
+                );
+              })()}
               <span className="px-2 py-0.5 rounded-full bg-white/10 text-white/50">
-                {gmail_signals.length} email signals
-              </span>
-              <span className="px-2 py-0.5 rounded-full bg-white/10 text-white/50">
-                {calendar_signals.length} calendar events
+                {calendar_signals.length} calendar event{calendar_signals.length !== 1 ? "s" : ""}
               </span>
             </>
           )}
@@ -252,8 +267,15 @@ function GmailSignalRow({ signal }: { signal: GmailSignal }) {
     recruiter_outreach: "text-purple-400",
   };
 
+  const isLinkedIn = signal.source === "linkedin";
+
   return (
     <div className="flex items-start gap-2 rounded bg-white/5 px-3 py-2 text-xs">
+      {isLinkedIn && (
+        <span className="shrink-0 rounded px-1 py-0.5 text-[9px] font-semibold bg-[#0A66C2]/20 text-[#4899f0] border border-[#0A66C2]/30">
+          LinkedIn
+        </span>
+      )}
       <span className={`font-medium shrink-0 ${typeColors[signal.signal_type] || "text-white/60"}`}>
         {signal.signal_type.replace("_", " ")}
       </span>
@@ -332,6 +354,11 @@ function SuggestionRow({
               }}
             >
               {stageMeta.label}
+            </span>
+          )}
+          {suggestion.source === "linkedin" && (
+            <span className="text-[9px] px-1 py-0.5 rounded bg-[#0A66C2]/20 text-[#4899f0]">
+              via LinkedIn
             </span>
           )}
           <span

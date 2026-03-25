@@ -813,6 +813,7 @@ class SupabaseStorageBackend:
                 "badge": entry.get("badge"),
                 "tags": entry.get("tags", []),
                 "sort_order": entry.get("sort_order", 0),
+                "source": entry.get("source"),
                 "created_at": entry.get("created_at") or datetime.now(timezone.utc).isoformat(),
                 "updated_at": datetime.now(timezone.utc).isoformat(),
             }
@@ -842,6 +843,7 @@ class SupabaseStorageBackend:
             "badge": row.get("badge"),
             "tags": row.get("tags", []),
             "sort_order": row.get("sort_order", 0),
+            "source": row.get("source"),
             "created_at": row.get("created_at", ""),
             "updated_at": row.get("updated_at", ""),
         }

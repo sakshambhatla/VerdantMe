@@ -143,7 +143,7 @@ class ExternalJobCacheEntry(BaseModel):
 # ── Pipeline ─────────────────────────────────────────────────────────────────
 
 PIPELINE_STAGES = {
-    "not_started", "recruiter", "hm_screen", "onsite", "offer", "blocked", "rejected",
+    "not_started", "outreach", "recruiter", "hm_screen", "onsite", "offer", "blocked", "rejected",
 }
 PIPELINE_BADGES = {"done", "new", "panel", "await", "sched"}
 
@@ -159,6 +159,7 @@ class PipelineEntry(BaseModel):
     badge: str | None = None
     tags: list[str] = []
     sort_order: int = 0
+    source: str | None = None  # "gmail" | "linkedin" | None
     created_at: str = ""
     updated_at: str = ""
 

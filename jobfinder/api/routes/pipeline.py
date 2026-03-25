@@ -428,12 +428,16 @@ async def apply_sync_suggestions(
         stage_entries = [e for e in entries if e.get("stage") == stage]
         max_order = max((e.get("sort_order", 0) for e in stage_entries), default=-1)
 
+        entry_source = new_co.source if new_co.source in ("gmail", "linkedin") else None
+        source_label = "LinkedIn" if entry_source == "linkedin" else "Gmail"
+
         new_entry = {
             "id": str(uuid.uuid4()),
             "company_name": new_co.company_name,
             "role_title": None,
             "stage": stage,
-            "note": f"Detected via {new_co.source}: {new_co.reason}",
+            "source": entry_source,
+            "note": f"Detected via {source_label}: {new_co.reason}",
             "next_action": new_co.suggested_next_action,
             "badge": "new",
             "tags": [],
@@ -449,7 +453,7 @@ async def apply_sync_suggestions(
             "update_type": "created",
             "from_stage": None,
             "to_stage": stage,
-            "message": f"Added {new_co.company_name} (detected via {new_co.source})",
+            "message": f"Added {new_co.company_name} (detected via {source_label})",
             "created_at": now,
         })
         created += 1

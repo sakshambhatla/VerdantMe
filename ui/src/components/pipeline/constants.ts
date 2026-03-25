@@ -8,6 +8,7 @@ export interface StageMeta {
 
 export const STAGE_META: Record<PipelineStage, StageMeta> = {
   not_started: { label: "Not Started", color: "#6b7280", bgColor: "rgba(107,114,128,0.15)" },
+  outreach:    { label: "Outreach",    color: "#0A66C2", bgColor: "rgba(10,102,194,0.15)" },
   recruiter: { label: "Recruiter Call", color: "#a3a6ff", bgColor: "rgba(163,166,255,0.15)" },
   hm_screen: { label: "HM Screen", color: "#53ddfc", bgColor: "rgba(83,221,252,0.15)" },
   onsite: { label: "Onsite / Deep", color: "#f59e0b", bgColor: "rgba(245,158,11,0.15)" },
@@ -18,6 +19,7 @@ export const STAGE_META: Record<PipelineStage, StageMeta> = {
 
 /** Stages shown as Kanban columns (excludes backlog). */
 export const BOARD_STAGES: PipelineStage[] = [
+  "outreach",
   "recruiter",
   "hm_screen",
   "onsite",

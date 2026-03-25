@@ -16,7 +16,9 @@ log = logging.getLogger(__name__)
 
 STAGE_TRANSITION_RULES = """
 Stage transition rules:
-- not_started → recruiter: Recruiter reaches out / screen scheduled
+- not_started → outreach: First LinkedIn InMail or cold recruiter email detected (no call scheduled yet)
+- outreach → recruiter: Initial outreach turns into a scheduled recruiter call
+- not_started → recruiter: Recruiter reaches out and call is already scheduled
 - recruiter → hm_screen: Recruiter screen completed, advancing to hiring manager
 - hm_screen → onsite: Panel / full onsite loop confirmed
 - any → blocked: ATS rejection, no open roles, no response, hiring freeze
@@ -30,6 +32,11 @@ Badge rules:
 - "new" = just entered the pipeline today
 - "panel" = panel or full onsite loop confirmed
 - null = no active status
+
+LinkedIn signals (tagged [LINKEDIN]):
+- Almost always recruiter outreach — suggest "outreach" stage (not "recruiter", which implies a call has occurred).
+- If company_name is a placeholder like "[LinkedIn: FirstName LastName]", try to extract the real company name from the snippet (look for "at <Company>" in the recruiter's headline). Use the real name if found; otherwise keep the placeholder.
+- For new_companies from LinkedIn signals: set "source" to "linkedin" and "suggested_stage" to "outreach".
 """
 
 
@@ -85,9 +92,11 @@ def _build_prompt(
 
     gmail_summary = []
     for g in gmail_signals:
+        source_tag = "[LINKEDIN]" if g.get("source") == "linkedin" else ""
         gmail_summary.append(
-            f"- [{g.get('signal_type', '?')}] {g.get('company_name', '?')}: "
-            f"subject=\"{g.get('subject', '')[:80]}\" | {g.get('date', '')}"
+            f"- [{g.get('signal_type', '?')}]{source_tag} {g.get('company_name', '?')}: "
+            f"subject=\"{g.get('subject', '')[:80]}\" | "
+            f"snippet=\"{g.get('snippet', '')[:100]}\" | {g.get('date', '')}"
         )
 
     calendar_summary = []
@@ -128,10 +137,10 @@ Each suggestion should have:
 - "source": "gmail", "calendar", or "both"
 
 Each new_company should have:
-- "company_name": inferred company name
-- "suggested_stage": "not_started" or "recruiter"
+- "company_name": inferred company name (resolve placeholders like "[LinkedIn: Name]" to real company if possible)
+- "suggested_stage": "outreach" (for LinkedIn signals), "recruiter" (if call already scheduled), or "not_started"
 - "reason": why this company was detected
-- "source": "gmail"
+- "source": "linkedin" (for [LINKEDIN]-tagged signals) or "gmail"
 
 Only suggest changes that are clearly supported by the signals. Do not guess.
 Respond with ONLY the JSON object, no markdown formatting.

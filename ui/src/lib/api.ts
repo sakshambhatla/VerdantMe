@@ -508,6 +508,7 @@ export async function deleteMotivation(): Promise<void> {
 
 export type PipelineStage =
   | "not_started"
+  | "outreach"
   | "recruiter"
   | "hm_screen"
   | "onsite"
@@ -527,6 +528,7 @@ export interface PipelineEntry {
   badge: PipelineBadge | null;
   tags: string[];
   sort_order: number;
+  source: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -652,6 +654,7 @@ export interface GmailSignal {
   snippet: string;
   date: string;
   is_new_company: boolean;
+  source: "gmail" | "linkedin";
 }
 
 export interface CalendarSignal {

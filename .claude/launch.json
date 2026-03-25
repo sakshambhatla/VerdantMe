@@ -2,6 +2,12 @@
   "version": "0.0.1",
   "configurations": [
     {
+      "name": "ui-dev-agent3",
+      "runtimeExecutable": "/bin/bash",
+      "runtimeArgs": ["-c", "export NVM_DIR=\"$HOME/.nvm\" && source \"$NVM_DIR/nvm.sh\" && nvm use 20 && pnpm --dir /Users/sakshambhatla/workplace/JobFinder-agent3/ui dev --port 5174"],
+      "port": 5174
+    },
+    {
       "name": "ui-dev",
       "runtimeExecutable": "/bin/bash",
       "runtimeArgs": ["-c", "export NVM_DIR=\"$HOME/.nvm\" && source \"$NVM_DIR/nvm.sh\" && nvm use 20 && pnpm --dir /Users/sakshambhatla/workplace/JobFinder/ui dev"],
