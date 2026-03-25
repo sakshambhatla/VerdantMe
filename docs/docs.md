@@ -48,3 +48,10 @@ Any OAuth scope requested in code must also be listed in the OAuth consent scree
 **Context**: Adding any new SECURITY DEFINER vault function (e.g., Google token storage in migration 013).
 **Issue**: There is no automated migration pipeline for Supabase. The `apply_vault_migration.py` script is hardcoded to migration 003, there's no `psql` or `supabase` CLI on the dev machine, and Render's deploy command doesn't run migrations. New vault functions are written to `supabase/migrations/` and pass CI (tests mock the DB), but fail at runtime in production because the SQL was never executed against the actual database.
 **Fix/Lesson**: After creating any new vault migration file, you must manually paste the SQL into the Supabase SQL Editor (Dashboard → SQL Editor → New Query). This is a known limitation tracked in `todo/vault-migration-automation.md`. The runtime error looks like `RuntimeError: ... vault functions are not installed` and surfaces as a generic "Network Error" or 500 to the user.
+
+---
+
+### 2026-03-25 LLM routes must try all providers, not just the default
+**Context**: Offer analysis button ("Get me Offer insights") silently failed in managed mode.
+**Issue**: The `POST /pipeline/offer-analyses` route used `config.model_provider` (defaults to `"anthropic"`) to resolve the API key. User only had a Gemini key stored, so `resolve_api_key("anthropic", user_id)` threw a ValueError → 400 response. The mutation had no `onError` handler, so the error was swallowed with no UI feedback.
+**Fix/Lesson**: Any API route that calls an LLM must iterate `SUPPORTED_PROVIDERS` to find an available key, not assume the default provider has one. Follow the pattern from `POST /pipeline/sync` (~line 361 in `pipeline.py`): try the configured provider first, then fall back. The pipeline sync route already did this correctly — the offer route was written separately and missed the pattern.

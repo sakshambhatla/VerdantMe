@@ -543,7 +543,7 @@ async def create_offer_analysis(
     _auth: tuple[str, str] | None = Depends(get_current_user),
 ) -> dict:
     """Run LLM analysis on an offer company and persist results."""
-    from jobfinder.config import load_config, resolve_api_key
+    from jobfinder.config import SUPPORTED_PROVIDERS, load_config, resolve_api_key
     from jobfinder.pipeline.offer_analysis import analyze_offer
 
     user_id, jwt_token = _auth if _auth else (None, None)
@@ -554,10 +554,24 @@ async def create_offer_analysis(
         overrides["model_provider"] = req.model_provider
     config = load_config(**overrides)
 
-    try:
-        api_key = resolve_api_key(config.model_provider, user_id)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    # Try the configured provider first, then fall back to any available key
+    api_key = None
+    provider = config.model_provider
+    providers_to_try = [provider] + [
+        p for p in SUPPORTED_PROVIDERS if p != provider
+    ]
+    for p in providers_to_try:
+        try:
+            api_key = resolve_api_key(p, user_id)
+            provider = p
+            break
+        except ValueError:
+            continue
+    if not api_key:
+        raise HTTPException(
+            status_code=400,
+            detail="No LLM API key available. Open Settings → API Keys to add your key.",
+        )
 
     # Look up role_title from pipeline entry if available
     entries = store.read("pipeline_entries.json") or []
@@ -573,7 +587,7 @@ async def create_offer_analysis(
         role_title,
         req.personal_context,
         api_key,
-        config.model_provider,
+        provider,
     )
 
     # Upsert into storage
@@ -591,7 +605,7 @@ async def create_offer_analysis(
         "company_name": req.company_name,
         "personal_context": req.personal_context,
         **result,
-        "model_provider": config.model_provider,
+        "model_provider": provider,
         "model_name": None,
         "created_at": existing.get("created_at", now) if existing else now,
         "updated_at": now,
