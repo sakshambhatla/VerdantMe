@@ -18,6 +18,8 @@ from jobfinder.utils.http import head_ok
 
 _BATCH_SIZE = 20   # companies per LLM call — safe within max_tokens=4096
 _MAX_BATCHES = 5   # hard cap: at most 100 companies total
+_VALIDATION_TIMEOUT = 5  # seconds; HEAD requests should respond fast
+_VALIDATION_WORKERS = 10  # parallel threads for company URL validation
 
 
 def discover_companies(
@@ -86,7 +88,7 @@ def discover_companies(
         seen_names.update(c.name.lower() for c in new)
         all_companies.extend(new)
 
-    _validate_companies(all_companies, timeout=config.request_timeout)
+    _validate_companies(all_companies, timeout=_VALIDATION_TIMEOUT)
 
     now = datetime.now(timezone.utc).isoformat()
     for c in all_companies:
@@ -245,53 +247,69 @@ def _name_to_slug(name: str) -> str:
     return slug
 
 
+def _validate_one(c: DiscoveredCompany, timeout: int) -> None:
+    """Validate a single company's career_page_url and ats_board_token in place."""
+    from jobfinder.utils.log_stream import log
+
+    if c.career_page_url:
+        if not head_ok(c.career_page_url, timeout=timeout):
+            log(
+                f"  [yellow]⚠[/yellow] {c.name}: career_page_url unreachable — cleared",
+                level="warning",
+            )
+            c.career_page_url = ""
+
+    if c.ats_type in _ATS_CHECK_URLS and c.ats_board_token:
+        check_url = _ATS_CHECK_URLS[c.ats_type].format(token=c.ats_board_token)
+        if not head_ok(check_url, timeout=timeout):
+            log(
+                f"  [yellow]⚠[/yellow] {c.name}: ats_board_token "
+                f"'{c.ats_board_token}' not found on {c.ats_type} — cleared",
+                level="warning",
+            )
+            c.ats_board_token = None
+
+    # Auto-detect ATS for unknown/unresolved companies
+    if c.ats_type == "unknown" or not c.ats_board_token:
+        slug = _name_to_slug(c.name)
+        detected = False
+        for ats_name in _ATS_PROBE_ORDER:
+            probe_url = _ATS_CHECK_URLS[ats_name].format(token=slug)
+            if head_ok(probe_url, timeout=timeout):
+                c.ats_type = ats_name
+                c.ats_board_token = slug
+                log(
+                    f"  [green]✓[/green] {c.name}: auto-detected as {ats_name} "
+                    f"(token: {slug!r})",
+                    level="success",
+                )
+                detected = True
+                break
+        if not detected and c.ats_type == "unknown":
+            log(
+                f"  [dim]{c.name}: ATS not auto-detected — will try career page[/dim]"
+            )
+
+
 def _validate_companies(companies: list[DiscoveredCompany], timeout: int = 10) -> None:
     """Validate career_page_url and ats_board_token in place; log warnings for failures.
+
+    Runs validation for all companies in parallel using a thread pool to avoid
+    sequential HEAD-request latency (which caused timeouts on large seed lists).
 
     Also auto-detects ATS for companies with ats_type == 'unknown' or missing board token
     by probing Greenhouse → Lever → Ashby with a slug derived from the company name.
     """
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
     from jobfinder.utils.log_stream import log
 
-    for c in companies:
-        if c.career_page_url:
-            if not head_ok(c.career_page_url, timeout=timeout):
-                log(
-                    f"  [yellow]⚠[/yellow] {c.name}: career_page_url unreachable — cleared",
-                    level="warning",
-                )
-                c.career_page_url = ""
+    log(f"  [dim]Validating {len(companies)} companies ({_VALIDATION_WORKERS} workers, {timeout}s timeout)...[/dim]")
 
-        if c.ats_type in _ATS_CHECK_URLS and c.ats_board_token:
-            check_url = _ATS_CHECK_URLS[c.ats_type].format(token=c.ats_board_token)
-            if not head_ok(check_url, timeout=timeout):
-                log(
-                    f"  [yellow]⚠[/yellow] {c.name}: ats_board_token "
-                    f"'{c.ats_board_token}' not found on {c.ats_type} — cleared",
-                    level="warning",
-                )
-                c.ats_board_token = None
-
-        # Auto-detect ATS for unknown/unresolved companies
-        if c.ats_type == "unknown" or not c.ats_board_token:
-            slug = _name_to_slug(c.name)
-            detected = False
-            for ats_name in _ATS_PROBE_ORDER:
-                probe_url = _ATS_CHECK_URLS[ats_name].format(token=slug)
-                if head_ok(probe_url, timeout=timeout):
-                    c.ats_type = ats_name
-                    c.ats_board_token = slug
-                    log(
-                        f"  [green]✓[/green] {c.name}: auto-detected as {ats_name} "
-                        f"(token: {slug!r})",
-                        level="success",
-                    )
-                    detected = True
-                    break
-            if not detected and c.ats_type == "unknown":
-                log(
-                    f"  [dim]{c.name}: ATS not auto-detected — will try career page[/dim]"
-                )
+    with ThreadPoolExecutor(max_workers=_VALIDATION_WORKERS) as pool:
+        futures = {pool.submit(_validate_one, c, timeout): c for c in companies}
+        for future in as_completed(futures):
+            future.result()  # propagate any unexpected exceptions
 
 
 def _parse_response(raw_text: str) -> list[DiscoveredCompany]:

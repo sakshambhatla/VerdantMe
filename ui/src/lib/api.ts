@@ -205,7 +205,8 @@ export async function discoverCompanies(
 ): Promise<DiscoverCompaniesResponse> {
   const { data } = await api.post<DiscoverCompaniesResponse>(
     "/companies/discover",
-    params
+    params,
+    { timeout: 180_000 } // 3 min — LLM batches + parallel URL validation
   );
   return data;
 }
