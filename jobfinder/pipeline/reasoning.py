@@ -8,6 +8,7 @@ new company detections, and a natural language summary.
 from __future__ import annotations
 
 import json
+import re
 import logging
 import uuid
 from dataclasses import asdict, dataclass, field
@@ -147,6 +148,40 @@ Respond with ONLY the JSON object, no markdown formatting.
 """
 
 
+_COMPANY_SUFFIXES = re.compile(
+    r"\s*\b(inc\.?|llc\.?|corp\.?|co\.?|ltd\.?|limited|incorporated|corporation)\s*$",
+    re.IGNORECASE,
+)
+
+
+def _normalize_company(name: str) -> str:
+    """Strip common corporate suffixes for fuzzy matching."""
+    return _COMPANY_SUFFIXES.sub("", name.lower()).strip()
+
+
+def _fuzzy_lookup(company: str, name_to_id: dict[str, str]) -> str | None:
+    """Look up entry_id by company name, falling back to fuzzy matching."""
+    key = company.lower()
+    # Exact match
+    if key in name_to_id:
+        return name_to_id[key]
+
+    # Normalized match (strip Inc/LLC/etc.)
+    norm = _normalize_company(company)
+    for entry_name, eid in name_to_id.items():
+        if _normalize_company(entry_name) == norm:
+            log.info("Fuzzy match (normalized): LLM said %r → matched %r", company, entry_name)
+            return eid
+
+    # Substring containment (either direction)
+    for entry_name, eid in name_to_id.items():
+        if norm in entry_name or entry_name in norm:
+            log.info("Fuzzy match (substring): LLM said %r → matched %r", company, entry_name)
+            return eid
+
+    return None
+
+
 def _parse_llm_response(text: str, entries: list[dict]) -> ReasoningResult:
     """Parse the LLM's JSON response into structured suggestions."""
     # Strip markdown code fences if present
@@ -173,7 +208,7 @@ def _parse_llm_response(text: str, entries: list[dict]) -> ReasoningResult:
     suggestions = []
     for s in data.get("suggestions", []):
         company = s.get("company_name", "")
-        entry_id = name_to_id.get(company.lower())
+        entry_id = _fuzzy_lookup(company, name_to_id)
         if not entry_id:
             continue  # Skip suggestions for unknown companies
 
@@ -446,3 +481,44 @@ def rule_based_suggestions(
         new_companies=new_companies,
         summary=summary,
     )
+
+
+def merge_rule_based_for_uncovered(
+    llm_result: ReasoningResult,
+    gmail_signals: list[dict],
+    calendar_signals: list[dict],
+    entries: list[dict],
+) -> ReasoningResult:
+    """Fill gaps the LLM missed by running rule-based on uncovered signals.
+
+    Computes which companies were already addressed by the LLM, runs the
+    rule-based engine on the full signal set, then appends only results
+    for companies the LLM did NOT cover.
+    """
+    covered = {s.company_name.lower() for s in llm_result.suggestions}
+    covered |= {c.company_name.lower() for c in llm_result.new_companies}
+
+    fallback = rule_based_suggestions(gmail_signals, calendar_signals, entries)
+
+    added_s = 0
+    for s in fallback.suggestions:
+        if s.company_name.lower() not in covered:
+            llm_result.suggestions.append(s)
+            covered.add(s.company_name.lower())
+            added_s += 1
+
+    added_n = 0
+    for c in fallback.new_companies:
+        if c.company_name.lower() not in covered:
+            llm_result.new_companies.append(c)
+            covered.add(c.company_name.lower())
+            added_n += 1
+
+    if added_s or added_n:
+        log.info(
+            "Hybrid merge: added %d rule-based suggestions + %d new companies "
+            "for signals the LLM did not cover",
+            added_s, added_n,
+        )
+
+    return llm_result

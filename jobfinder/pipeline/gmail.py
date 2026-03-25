@@ -158,6 +158,7 @@ def scan_gmail(
     tokens: dict[str, str],
     pipeline_entries: list[dict],
     lookback_days: int = 3,
+    custom_phrases: list[str] | None = None,
 ) -> list[GmailSignal]:
     """Search Gmail for interview-related signals.
 
@@ -209,6 +210,18 @@ def scan_gmail(
     for sig in broad_signals:
         if sig.company_name.lower() not in existing_names and sig.company_name.lower() not in known_companies:
             signals.append(sig)
+            existing_names.add(sig.company_name.lower())
+
+    # ── Pass 3: Custom phrases (user-specified companies/keywords) ─────
+    phrases = [p.strip() for p in (custom_phrases or []) if p.strip()]
+    if phrases:
+        or_clause = " OR ".join(f'"{p}"' for p in phrases)
+        phrase_query = f"after:{since} ({or_clause})"
+        phrase_signals = _search_and_extract(service, phrase_query, known_companies, is_new=True)
+        for sig in phrase_signals:
+            if sig.company_name.lower() not in existing_names and sig.company_name.lower() not in known_companies:
+                signals.append(sig)
+                existing_names.add(sig.company_name.lower())
 
     return signals
 

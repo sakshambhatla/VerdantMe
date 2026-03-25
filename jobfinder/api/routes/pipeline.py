@@ -326,10 +326,18 @@ async def sync_pipeline(
             from jobfinder.pipeline.gmail import scan_gmail
             from jobfinder.pipeline.calendar import scan_calendar
 
-            raw_gmail = await asyncio.to_thread(scan_gmail, tokens, entries)
+            lookback = min(max(req.lookback_days if req else 3, 1), 14)
+            phrases = req.custom_phrases if req else []
+
+            raw_gmail = await asyncio.to_thread(
+                scan_gmail, tokens, entries,
+                lookback_days=lookback, custom_phrases=phrases,
+            )
             gmail_signals = [s.to_dict() for s in raw_gmail]
 
-            raw_calendar = await asyncio.to_thread(scan_calendar, tokens, entries)
+            raw_calendar = await asyncio.to_thread(
+                scan_calendar, tokens, entries, past_days=lookback,
+            )
             calendar_signals = [s.to_dict() for s in raw_calendar]
 
     # ── LLM reasoning (requires user's API key) ──────────────────────────
@@ -377,8 +385,17 @@ async def sync_pipeline(
             except ValueError:
                 log.info("Pipeline sync: no %s API key for user %s", provider, user_id)
 
-        # ── Rule-based fallback (when LLM unavailable or returned nothing) ──
-        if not suggestions and not new_companies:
+        # ── Hybrid merge: fill gaps the LLM missed with rule-based engine ──
+        if suggestions or new_companies:
+            from jobfinder.pipeline.reasoning import merge_rule_based_for_uncovered
+
+            merged = merge_rule_based_for_uncovered(result, gmail_signals, calendar_signals, entries)
+            suggestions = [s.to_dict() for s in merged.suggestions]
+            new_companies = [c.to_dict() for c in merged.new_companies]
+            if not summary:
+                summary = merged.summary
+        else:
+            # Full fallback: no LLM key available or LLM returned nothing
             from jobfinder.pipeline.reasoning import rule_based_suggestions
 
             fallback = rule_based_suggestions(gmail_signals, calendar_signals, entries)

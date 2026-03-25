@@ -22,17 +22,20 @@ import {
 } from "@/lib/api";
 import { useMode } from "@/contexts/ModeContext";
 import PipelineBoard from "./pipeline/PipelineBoard";
-import PipelineBacklog from "./pipeline/PipelineBacklog";
+import PipelineSideSection from "./pipeline/PipelineSideSection";
 import PipelineFunnel from "./pipeline/PipelineFunnel";
+import { BOARD_STAGES } from "./pipeline/constants";
 import PipelineUpdates from "./pipeline/PipelineUpdates";
 import PipelineEntryDialog from "./pipeline/PipelineEntryDialog";
 import PipelineSyncModal from "./pipeline/PipelineSyncModal";
+import SyncSettingsDialog from "./pipeline/SyncSettingsDialog";
 
 export function PipelinePage() {
   const qc = useQueryClient();
   const { mode } = useMode();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingEntry, setEditingEntry] = useState<PipelineEntry | null>(null);
+  const [syncSettingsOpen, setSyncSettingsOpen] = useState(false);
   const [syncModalOpen, setSyncModalOpen] = useState(false);
   const [syncResult, setSyncResult] = useState<SyncResult | null>(null);
   const [showLocalModeNotice, setShowLocalModeNotice] = useState(false);
@@ -65,8 +68,12 @@ export function PipelinePage() {
   });
 
   const entries = entriesData?.entries ?? [];
+  const boardEntries = entries.filter((e) =>
+    (BOARD_STAGES as string[]).includes(e.stage),
+  );
   const backlogEntries = entries.filter((e) => e.stage === "not_started");
-  const activeEntries = entries.filter((e) => e.stage !== "not_started");
+  const blockedEntries = entries.filter((e) => e.stage === "blocked");
+  const rejectedEntries = entries.filter((e) => e.stage === "rejected");
 
   // ── Mutations ─────────────────────────────────────────────────────────────
 
@@ -129,8 +136,10 @@ export function PipelinePage() {
   });
 
   const syncMutation = useMutation({
-    mutationFn: () => syncPipeline(),
+    mutationFn: (params?: { lookback_days: number; custom_phrases: string[] }) =>
+      syncPipeline(params),
     onSuccess: (result) => {
+      setSyncSettingsOpen(false);
       setSyncResult(result);
       setSyncModalOpen(true);
     },
@@ -193,7 +202,14 @@ export function PipelinePage() {
       setShowLocalModeNotice(true);
       return;
     }
-    syncMutation.mutate();
+    setSyncSettingsOpen(true);
+  };
+
+  const handleSyncWithSettings = (params: {
+    lookback_days: number;
+    custom_phrases: string[];
+  }) => {
+    syncMutation.mutate(params);
   };
 
   const handleApplySuggestions = (
@@ -246,8 +262,8 @@ export function PipelinePage() {
           </h2>
           <p className="text-sm text-white/35 mt-0.5">
             {entries.length} companies tracked
-            {activeEntries.length > 0 &&
-              ` \u00b7 ${activeEntries.length} active`}
+            {boardEntries.length > 0 &&
+              ` \u00b7 ${boardEntries.length} active`}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -286,13 +302,33 @@ export function PipelinePage() {
 
       {/* Kanban Board */}
       <PipelineBoard
-        entries={activeEntries}
+        entries={boardEntries}
         onEdit={handleEdit}
         onDrop={handleDrop}
       />
 
-      {/* Backlog */}
-      <PipelineBacklog entries={backlogEntries} onEdit={handleEdit} />
+      {/* Side sections: Backlog, Blocked, Rejected */}
+      <PipelineSideSection
+        stage="not_started"
+        label="Backlog — Not Started"
+        entries={backlogEntries}
+        onEdit={handleEdit}
+        onDrop={handleDrop}
+      />
+      <PipelineSideSection
+        stage="blocked"
+        label="Blocked"
+        entries={blockedEntries}
+        onEdit={handleEdit}
+        onDrop={handleDrop}
+      />
+      <PipelineSideSection
+        stage="rejected"
+        label="Rejected"
+        entries={rejectedEntries}
+        onEdit={handleEdit}
+        onDrop={handleDrop}
+      />
 
       {/* Updates */}
       {updatesData && <PipelineUpdates updates={updatesData.updates} />}
@@ -310,6 +346,14 @@ export function PipelinePage() {
         saving={createMutation.isPending || updateMutation.isPending}
       />
 
+      {/* Sync Settings Dialog */}
+      <SyncSettingsDialog
+        open={syncSettingsOpen}
+        onOpenChange={setSyncSettingsOpen}
+        onSync={handleSyncWithSettings}
+        syncing={syncMutation.isPending}
+      />
+
       {/* Sync Results Modal */}
       <PipelineSyncModal
         open={syncModalOpen}
@@ -318,6 +362,7 @@ export function PipelinePage() {
           if (!open) setSyncResult(null);
         }}
         syncResult={syncResult}
+        entries={entries}
         onApply={handleApplySuggestions}
         applying={applyMutation.isPending}
       />

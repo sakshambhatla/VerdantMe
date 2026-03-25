@@ -679,6 +679,31 @@ export interface PipelineSuggestion {
   source: string;
 }
 
+/** Frontend view model for the 3-column sync review modal.
+ *  Built from PipelineSuggestion + signal data. Maps 1:1 to PipelineEntry
+ *  fields shown on Kanban cards. The conversion layer is swappable —
+ *  today it's LLM/rule-based, later it could be something else. */
+export interface JobUpdate {
+  id: string;
+  source: "gmail" | "calendar";
+  company_name: string;
+  stage: string;
+  badge: string | null;
+  next_action: string | null;
+  note: string;
+  updated_at: string;
+  recommendation: "add" | "update" | "ignore";
+  // Original signal context for the left column
+  signal_type: string;
+  signal_subject: string;
+  signal_date: string;
+  // Back-reference to apply via existing backend
+  entry_id: string | null;
+  confidence: string;
+  // Current stage of the entry (null for new companies)
+  current_stage: string | null;
+}
+
 export interface SyncResult {
   gmail_signals: GmailSignal[];
   calendar_signals: CalendarSignal[];
@@ -689,11 +714,17 @@ export interface SyncResult {
   llm_available: boolean;
 }
 
-export async function syncPipeline(
-  modelProvider?: string,
-): Promise<SyncResult> {
+export async function syncPipeline(params?: {
+  modelProvider?: string;
+  lookback_days?: number;
+  custom_phrases?: string[];
+}): Promise<SyncResult> {
   const { data } = await api.post("/pipeline/sync", {
-    ...(modelProvider ? { model_provider: modelProvider } : {}),
+    ...(params?.modelProvider ? { model_provider: params.modelProvider } : {}),
+    ...(params?.lookback_days ? { lookback_days: params.lookback_days } : {}),
+    ...(params?.custom_phrases?.length
+      ? { custom_phrases: params.custom_phrases }
+      : {}),
   });
   return data;
 }

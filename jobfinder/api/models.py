@@ -77,6 +77,8 @@ class CreatePipelineUpdateRequest(BaseModel):
 
 class PipelineSyncRequest(BaseModel):
     model_provider: str | None = None  # override LLM provider for reasoning
+    lookback_days: int = 3  # 1–14; how far back to scan Gmail/Calendar
+    custom_phrases: list[str] = []  # extra company names or keywords to search
 
 
 class SyncSuggestionApply(BaseModel):
