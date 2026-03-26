@@ -76,7 +76,34 @@ def discover_companies(
                 motivation_summary=motivation_summary,
             )
 
-        batch = _parse_response(raw_text)
+        try:
+            batch = _parse_response(raw_text)
+        except ValueError:
+            # LLM returned non-JSON text — retry the batch once
+            log(
+                f"  [yellow]Model returned non-JSON response — retrying batch {batch_num + 1}…[/yellow]",
+                level="warning",
+            )
+            if config.model_provider == "gemini":
+                raw_text = _call_gemini(
+                    resumes, config,
+                    seed_companies=seed_companies,
+                    batch_size=batch_size,
+                    exclude_names=exclude,
+                    api_key=api_key,
+                    motivation_summary=motivation_summary,
+                )
+            else:
+                raw_text = _call_anthropic(
+                    resumes, config,
+                    seed_companies=seed_companies,
+                    batch_size=batch_size,
+                    exclude_names=exclude,
+                    api_key=api_key,
+                    motivation_summary=motivation_summary,
+                )
+            batch = _parse_response(raw_text)  # let it raise on second failure
+
         new = [c for c in batch if c.name.lower() not in seen_names]
 
         if not new:
