@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  discoverCompanies,
+  discoverCompaniesStream,
   getCompanies,
   getCompanyRun,
   getCompanyRuns,
@@ -269,7 +269,7 @@ export function CompaniesTab() {
         mode === "resume"
           ? selectedResumeId || undefined
           : undefined;
-      return discoverCompanies({
+      return discoverCompaniesStream({
         max_companies: maxCompanies ? parseInt(maxCompanies, 10) : undefined,
         model_provider: provider || undefined,
         seed_companies: seeds && seeds.length > 0 ? seeds : undefined,

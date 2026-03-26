@@ -29,6 +29,7 @@ routes/
 | GET | `/api/resume` | Reads `resumes.json`, 404 if absent |
 | DELETE | `/api/resume/{filename}` | Removes resume entry + deletes `.txt` file |
 | POST | `/api/companies/discover` | LLM company discovery; writes `companies.json` + `company_runs.json`; upserts registry. Accepts `focus` ("regular"\|"startups") — stored on run, auto-enables YC Jobs in role discovery |
+| POST | `/api/companies/discover/stream` | SSE-streaming version of company discovery; emits `progress`, `done`, `error`; auto-keepalive via sse_starlette pings (15 s) — used by the UI to avoid proxy timeouts |
 | GET | `/api/companies` | Reads `companies.json`, 404 if absent |
 | GET | `/api/companies/registry` | Returns perpetual per-user company registry |
 | POST | `/api/roles/discover` | ATS fetch + filter + score; writes `roles.json` + `job_runs.json` |

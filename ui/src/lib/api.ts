@@ -211,6 +211,82 @@ export async function discoverCompanies(
   return data;
 }
 
+/**
+ * SSE-streaming version of discoverCompanies.
+ *
+ * Uses POST + fetch (not EventSource) so we can send a JSON body.
+ * The server sends keepalive pings every 15 s, preventing proxy timeouts.
+ */
+export async function discoverCompaniesStream(
+  params: DiscoverCompaniesParams,
+  onProgress?: (message: string) => void,
+): Promise<DiscoverCompaniesResponse> {
+  const baseURL = import.meta.env.VITE_API_BASE_URL || "/api";
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+
+  const mode = localStorage.getItem("verdantme-mode");
+  if (supabase && mode === "managed") {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.access_token) {
+      headers["Authorization"] = `Bearer ${session.access_token}`;
+    }
+  }
+
+  const resp = await fetch(`${baseURL}/companies/discover/stream`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(params),
+  });
+
+  if (!resp.ok) {
+    const text = await resp.text();
+    let detail: string;
+    try { detail = JSON.parse(text).detail; } catch { detail = text; }
+    throw { response: { data: { detail } }, message: detail };
+  }
+
+  const reader = resp.body?.getReader();
+  if (!reader) throw { message: "No response body" };
+
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let result: DiscoverCompaniesResponse | null = null;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+
+    const parts = buffer.split("\n\n");
+    buffer = parts.pop() ?? "";
+
+    for (const part of parts) {
+      let eventType = "";
+      let dataStr = "";
+      for (const line of part.split("\n")) {
+        if (line.startsWith("event:")) eventType = line.slice(6).trim();
+        else if (line.startsWith("data:")) dataStr += line.slice(5).trim();
+      }
+      if (!eventType || !dataStr) continue;
+
+      if (eventType === "progress") {
+        try {
+          const parsed = JSON.parse(dataStr);
+          onProgress?.(parsed.message);
+        } catch { /* ignore malformed progress */ }
+      } else if (eventType === "done") {
+        result = JSON.parse(dataStr) as DiscoverCompaniesResponse;
+      } else if (eventType === "error") {
+        const parsed = JSON.parse(dataStr);
+        throw { response: { data: { detail: parsed.detail } }, message: parsed.detail };
+      }
+    }
+  }
+
+  if (!result) throw { message: "Stream ended without a result" };
+  return result;
+}
+
 export async function getCompanyRuns(
   page = 1,
   pageSize = 10
