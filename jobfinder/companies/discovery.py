@@ -212,7 +212,6 @@ def _call_gemini(
             contents=user_prompt,
             config=types.GenerateContentConfig(
                 system_instruction=system,
-                tools=[types.Tool(google_search=types.GoogleSearch())],
             ),
         ):
             if chunk.text:
