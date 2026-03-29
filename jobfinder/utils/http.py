@@ -6,7 +6,7 @@ import httpx
 
 DEFAULT_HEADERS = {
 
-    "User-Agent": "JobFinder/5.5.4 (career-search-tool)",
+    "User-Agent": "JobFinder/5.5.5 (career-search-tool)",
     "Accept": "application/json",
 }
 
