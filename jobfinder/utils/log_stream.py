@@ -117,18 +117,18 @@ def log(message: str, level: str = "info", *, run_id: str | None = None) -> None
             with open(_log_file_path, "a") as f:
                 f.write(f"{prefix} {plain}\n")
 
-    # 4. Push to ring buffer (thread-safe) — skip in managed mode
-    if not os.environ.get("SUPABASE_URL"):
-        with _log_lock:
-            entry = {
-                "seq": _log_counter,
-                "timestamp": timestamp,
-                "level": level,
-                "message": plain,
-                "run_id": effective_run_id,
-            }
-            _log_buffer.append(entry)
-            _log_counter += 1
+    # 4. Push to ring buffer (thread-safe)
+    # Access controlled at the endpoint level (devtest+ only, see routes/logs.py)
+    with _log_lock:
+        entry = {
+            "seq": _log_counter,
+            "timestamp": timestamp,
+            "level": level,
+            "message": plain,
+            "run_id": effective_run_id,
+        }
+        _log_buffer.append(entry)
+        _log_counter += 1
 
 
 def get_logs_since(seq: int) -> tuple[list[dict], int]:
