@@ -30,6 +30,8 @@ class DiscoverRolesRequest(BaseModel):
     model_provider: str | None = None  # overrides config
     skip_career_page: bool | None = None  # True → skip Playwright Pass 2; None → use config default
     enable_yc_jobs: bool | None = None  # True → enable YC Jobs Pass 0; auto-set from company run focus
+    enable_theirstack: bool | None = None  # True → enable TheirStack fallback (Pass 1.5)
+    theirstack_max_results: int | None = None  # Max jobs per company (1 credit each; default 25)
 
 
 class MotivationChatRequest(BaseModel):

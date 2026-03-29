@@ -8,6 +8,12 @@ from jobfinder.storage.schemas import DiscoveredRole, RolesCacheEntry
 CACHE_FILENAME = "roles_cache.json"
 CACHE_TTL_DAYS = 2
 
+# Per-ats_type TTL overrides (days).  TheirStack results cost credits to
+# refresh, so we cache them longer than free ATS results.
+_TTL_OVERRIDES: dict[str, int] = {
+    "theirstack": 3,
+}
+
 
 class RolesCache:
     """Per-company, per-ATS cache for raw role fetch results.
@@ -33,7 +39,8 @@ class RolesCache:
             return None
 
         cached_at = datetime.fromisoformat(entry["cached_at"])
-        if datetime.now(timezone.utc) - cached_at > timedelta(days=CACHE_TTL_DAYS):
+        ttl = _TTL_OVERRIDES.get(ats_type, CACHE_TTL_DAYS)
+        if datetime.now(timezone.utc) - cached_at > timedelta(days=ttl):
             return None  # expired
 
         return [DiscoveredRole.model_validate(r) for r in entry["roles"]]

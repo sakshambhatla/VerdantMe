@@ -357,6 +357,8 @@ export interface DiscoverRolesParams {
   model_provider?: string;
   skip_career_page?: boolean;
   enable_yc_jobs?: boolean;
+  enable_theirstack?: boolean;
+  theirstack_max_results?: number;
 }
 
 export interface RolesCheckpoint {

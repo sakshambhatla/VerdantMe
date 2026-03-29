@@ -175,6 +175,12 @@ class SupabaseStorageBackend:
                 "exists": self._exists_offer_analyses,
                 "delete": self._delete_offer_analyses,
             },
+            "theirstack_credits.json": {
+                "read": self._read_theirstack_credits,
+                "write": self._write_theirstack_credits,
+                "exists": self._exists_theirstack_credits,
+                "delete": self._delete_theirstack_credits,
+            },
         }
         return handlers.get(collection)
 
@@ -975,3 +981,36 @@ class SupabaseStorageBackend:
             "created_at": row.get("created_at", ""),
             "updated_at": row.get("updated_at", ""),
         }
+
+    # ── TheirStack Credits (JSONB blob) ───────────────────────────────────────
+
+    def _read_theirstack_credits(self) -> dict | None:
+        resp = (
+            self._client.table("theirstack_credits")
+            .select("data")
+            .eq("user_id", self._user_id)
+            .execute()
+        )
+        if not resp.data:
+            return None
+        return resp.data[0].get("data")
+
+    def _write_theirstack_credits(self, data: dict | list) -> None:
+        row = {
+            "user_id": self._user_id,
+            "data": data,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+        self._client.table("theirstack_credits").upsert(row, on_conflict="user_id").execute()
+
+    def _exists_theirstack_credits(self) -> bool:
+        resp = (
+            self._client.table("theirstack_credits")
+            .select("id", count="exact")
+            .eq("user_id", self._user_id)
+            .execute()
+        )
+        return (resp.count or 0) > 0
+
+    def _delete_theirstack_credits(self) -> None:
+        self._client.table("theirstack_credits").delete().eq("user_id", self._user_id).execute()

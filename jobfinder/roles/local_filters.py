@@ -430,12 +430,16 @@ def _posted_after_matches(role: DiscoveredRole, after_str: str) -> bool:
 def filter_roles_local(
     roles: list[DiscoveredRole],
     filters: RoleFilters,
+    *,
+    skip_title: bool = False,
 ) -> list[DiscoveredRole]:
     """Filter roles using fuzzy or semantic matching — no LLM calls.
 
     Args:
         roles:   Full list of raw roles to filter.
         filters: Filter criteria; ``filters.filter_strategy`` must be "fuzzy" or "semantic".
+        skip_title: If True, skip title matching (e.g. for TheirStack roles
+            where the title was pre-filtered server-side).
 
     Returns:
         Subset of *roles* that satisfy ALL provided criteria (AND logic).
@@ -464,7 +468,7 @@ def filter_roles_local(
         keep = True
 
         # ── title ────────────────────────────────────────────────────────────
-        if filters.title:
+        if filters.title and not skip_title:
             if strategy == "semantic":
                 keep = _title_matches_semantic(role.title, filters.title, semantic_threshold)
             else:

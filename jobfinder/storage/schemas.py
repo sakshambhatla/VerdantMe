@@ -59,6 +59,7 @@ class DiscoveredRole(BaseModel):
     fetched_at: str = ""
     relevance_score: int | None = None
     summary: str | None = None
+    source_path: str = "ats"  # "ats" | "theirstack" — which pipeline path produced this role
 
 
 class FlaggedCompany(BaseModel):
@@ -107,6 +108,8 @@ class JobRunMetrics(BaseModel):
 
     playwright_uses: int = 0
     browser_agent_uses: int = 0
+    theirstack_uses: int = 0
+    theirstack_credits_used: int = 0
 
     total_roles_fetched: int = 0
     total_roles_after_filter: int = 0

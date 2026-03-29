@@ -168,6 +168,10 @@ async def discover_roles_endpoint(
         overrides["role_filters"] = req.role_filters.model_dump()
     if req.skip_career_page is not None:
         overrides["skip_career_page"] = req.skip_career_page
+    if req.enable_theirstack is not None:
+        overrides["enable_theirstack"] = req.enable_theirstack
+    if req.theirstack_max_results is not None:
+        overrides["theirstack_max_results"] = req.theirstack_max_results
 
     store = get_storage_backend(user_id, jwt_token)
     cp = _make_checkpoint(store)
@@ -327,22 +331,42 @@ async def discover_roles_endpoint(
     store.write("roles_unfiltered.json", unfiltered_output)
 
     # ── Filter ────────────────────────────────────────────────────────────────
+    # Split by source_path: ATS roles get full filter, TheirStack roles skip title.
 
     filtered_roles = roles
     if config.role_filters and roles:
         from jobfinder.roles.filters import filter_roles
+
+        ats_roles = [r for r in roles if getattr(r, "source_path", "ats") != "theirstack"]
+        ts_roles = [r for r in roles if getattr(r, "source_path", "ats") == "theirstack"]
+
         try:
-            filtered_roles = await asyncio.to_thread(
-                filter_roles,
-                roles,
-                config.role_filters,
-                config,
-                checkpoint=cp,
-                resume_batches=resume_filter_batches,
-                resume_kept=resume_filter_kept,
-                api_key=api_key,
-                metrics=collector,
+            filtered_ats = (
+                await asyncio.to_thread(
+                    filter_roles,
+                    ats_roles,
+                    config.role_filters,
+                    config,
+                    checkpoint=cp,
+                    resume_batches=resume_filter_batches,
+                    resume_kept=resume_filter_kept,
+                    api_key=api_key,
+                    metrics=collector,
+                )
+                if ats_roles else []
             )
+            filtered_ts = (
+                await asyncio.to_thread(
+                    filter_roles,
+                    ts_roles,
+                    config.role_filters,
+                    config,
+                    api_key=api_key,
+                    skip_title=True,
+                )
+                if ts_roles else []
+            )
+            filtered_roles = filtered_ats + filtered_ts
         except RateLimitError as exc:
             raise HTTPException(
                 status_code=429,
@@ -449,6 +473,10 @@ async def discover_roles_stream(
         overrides["role_filters"] = req.role_filters.model_dump()
     if req.skip_career_page is not None:
         overrides["skip_career_page"] = req.skip_career_page
+    if req.enable_theirstack is not None:
+        overrides["enable_theirstack"] = req.enable_theirstack
+    if req.theirstack_max_results is not None:
+        overrides["theirstack_max_results"] = req.theirstack_max_results
 
     store = get_storage_backend(user_id, jwt_token)
     cp = _make_checkpoint(store)
@@ -604,20 +632,38 @@ async def discover_roles_stream(
             store.write("roles_unfiltered.json", unfiltered_output)
 
             # ── Filter ───────────────────────────────────────────────────
+            # Split by source_path: ATS roles get full filter, TheirStack skip title.
             filtered_roles = roles
             if config.role_filters and roles:
                 from jobfinder.roles.filters import filter_roles
+
+                ats_roles = [r for r in roles if getattr(r, "source_path", "ats") != "theirstack"]
+                ts_roles = [r for r in roles if getattr(r, "source_path", "ats") == "theirstack"]
+
                 yield {"event": "progress", "data": json.dumps({"message": "Filtering roles…"})}
                 try:
-                    filtered_roles = await asyncio.to_thread(
-                        filter_roles,
-                        roles, config.role_filters, config,
-                        checkpoint=cp,
-                        resume_batches=resume_filter_batches,
-                        resume_kept=resume_filter_kept,
-                        api_key=api_key,
-                        metrics=collector,
+                    filtered_ats = (
+                        await asyncio.to_thread(
+                            filter_roles,
+                            ats_roles, config.role_filters, config,
+                            checkpoint=cp,
+                            resume_batches=resume_filter_batches,
+                            resume_kept=resume_filter_kept,
+                            api_key=api_key,
+                            metrics=collector,
+                        )
+                        if ats_roles else []
                     )
+                    filtered_ts = (
+                        await asyncio.to_thread(
+                            filter_roles,
+                            ts_roles, config.role_filters, config,
+                            api_key=api_key,
+                            skip_title=True,
+                        )
+                        if ts_roles else []
+                    )
+                    filtered_roles = filtered_ats + filtered_ts
                 except RateLimitError as exc:
                     yield {
                         "event": "error",

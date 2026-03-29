@@ -900,6 +900,7 @@ export function RolesTab() {
   const [useCache, setUseCache] = useState(false);
   const [filterStrategy, setFilterStrategy] = useState<"llm" | "fuzzy" | "semantic">("llm");
   const [skipCareerPage, setSkipCareerPage] = useState(false);
+  const [enableTheirstack, setEnableTheirstack] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Pagination & tab state
@@ -969,6 +970,8 @@ export function RolesTab() {
         relevance_score_criteria: scoringCriteria || undefined,
         model_provider: provider || undefined,
         skip_career_page: skipCareerPage || undefined,
+        enable_theirstack: enableTheirstack || undefined,
+        theirstack_max_results: enableTheirstack ? 25 : undefined,
       });
     },
     onSuccess: (data) => {
@@ -1055,9 +1058,13 @@ export function RolesTab() {
               <Input
                 id="title-filter"
                 placeholder="e.g. Engineering Manager"
+                maxLength={100}
                 value={titleFilter}
                 onChange={(e) => setTitleFilter(e.target.value)}
               />
+              {titleFilter.length > 80 && (
+                <p className="text-xs text-white/40">{titleFilter.length}/100</p>
+              )}
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="location-filter" className="text-white/75">Location</Label>
@@ -1165,6 +1172,15 @@ export function RolesTab() {
                 className="accent-white/70"
               />
               API results only <span className="text-xs text-white/35">(skip Playwright career page)</span>
+            </label>
+            <label className="flex items-center gap-2 text-sm text-white/55 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={enableTheirstack}
+                onChange={(e) => setEnableTheirstack(e.target.checked)}
+                className="accent-white/70"
+              />
+              Also search TheirStack <span className="text-xs text-white/35">(for companies without ATS API)</span>
             </label>
             {sourceMode === "registry" && selectedNames.length > 0 && (
               <span className="text-xs text-white/40">

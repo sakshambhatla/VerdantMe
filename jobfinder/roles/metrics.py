@@ -26,6 +26,8 @@ class RunMetricsCollector:
 
         self.playwright_uses: int = 0
         self.browser_agent_uses: int = 0
+        self.theirstack_uses: int = 0
+        self.theirstack_credits_used: int = 0
 
         self.total_roles_fetched: int = 0
         self.total_roles_after_filter: int = 0
@@ -83,6 +85,21 @@ class RunMetricsCollector:
         )
         self.total_roles_fetched += role_count
 
+    def record_theirstack_fetch(
+        self, company_name: str, role_count: int, credits: int
+    ) -> None:
+        self.theirstack_uses += 1
+        self.theirstack_credits_used += credits
+        ats = "theirstack"
+        self.ats_visits[ats] = self.ats_visits.get(ats, 0) + 1
+        self.jobs_per_ats[ats] = self.jobs_per_ats.get(ats, 0) + role_count
+        self.jobs_per_company[company_name] = (
+            self.jobs_per_company.get(company_name, 0) + role_count
+        )
+        if role_count > 0:
+            self.companies_succeeded += 1
+        self.total_roles_fetched += role_count
+
     def record_external_source(
         self, source_name: str, role_count: int
     ) -> None:
@@ -116,6 +133,8 @@ class RunMetricsCollector:
             career_page_per_company=dict(self.career_page_per_company),
             playwright_uses=self.playwright_uses,
             browser_agent_uses=self.browser_agent_uses,
+            theirstack_uses=self.theirstack_uses,
+            theirstack_credits_used=self.theirstack_credits_used,
             total_roles_fetched=self.total_roles_fetched,
             total_roles_after_filter=self.total_roles_after_filter,
             total_roles_after_score=self.total_roles_after_score,

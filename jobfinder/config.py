@@ -54,6 +54,15 @@ class AppConfig(BaseModel):
     # Enable Y Combinator Jobs API (requires a RapidAPI key).
     enable_yc_jobs: bool = False
 
+    # ── TheirStack settings ──────────────────────────────────────────────────
+    # Enable TheirStack Job Search API as a fallback when ATS APIs fail.
+    # Requires THEIRSTACK_API_KEY environment variable.
+    enable_theirstack: bool = False
+    # Maximum jobs to return per TheirStack query (1 credit per job).
+    theirstack_max_results: int = 25
+    # Total credit budget for the free tier (auto-resets after 30 days).
+    theirstack_credit_budget: int = 200
+
     # ── Browser agent settings (config.json only, not exposed in the UI) ──────
     # Hard time wall: agent is cancelled after this many minutes regardless of steps.
     browser_agent_max_time_minutes: int = 15
@@ -175,3 +184,8 @@ def get_rapidapi_key() -> str | None:
     not stored per-user in Vault.
     """
     return os.environ.get("RAPIDAPI_KEY")
+
+
+def get_theirstack_api_key() -> str | None:
+    """Return the TheirStack API key from env, or None if not set."""
+    return os.environ.get("THEIRSTACK_API_KEY")

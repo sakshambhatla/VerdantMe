@@ -224,6 +224,18 @@ def discover_companies(
     default=None,
     help="Include Y Combinator Jobs from RapidAPI (requires RAPIDAPI_KEY env var)",
 )
+@click.option(
+    "--enable-theirstack",
+    is_flag=True,
+    default=None,
+    help="Enable TheirStack Job Search API as ATS fallback (requires THEIRSTACK_API_KEY env var)",
+)
+@click.option(
+    "--theirstack-max-results",
+    type=int,
+    default=None,
+    help="Max jobs per company from TheirStack (1 credit each; default 25)",
+)
 @click.pass_context
 def discover_roles_cmd(
     ctx: click.Context,
@@ -233,6 +245,8 @@ def discover_roles_cmd(
     use_cache: bool,
     skip_career_page: bool,
     enable_yc_jobs: bool | None,
+    enable_theirstack: bool | None,
+    theirstack_max_results: int | None,
 ) -> None:
     """Read open roles from discovered companies' career pages via public ATS APIs."""
     from jobfinder.roles.checkpoint import CHECKPOINT_FILENAME, Checkpoint
@@ -244,6 +258,8 @@ def discover_roles_cmd(
         ctx.obj["config_path"],
         skip_career_page=skip_career_page or None,
         enable_yc_jobs=enable_yc_jobs,
+        enable_theirstack=enable_theirstack,
+        theirstack_max_results=theirstack_max_results,
     )
     store = StorageManager(config.data_dir)
     cp = Checkpoint(store)
@@ -337,17 +353,28 @@ def discover_roles_cmd(
         resume_score_batches = 0
 
     # ── Filter ────────────────────────────────────────────────────────────────
+    # Split roles by source_path: ATS roles get full filter chain, TheirStack
+    # roles skip title filter (title was pre-filtered server-side).
 
     filtered_roles = roles
     if config.role_filters and roles:
         from jobfinder.roles.filters import filter_roles
+
+        ats_roles = [r for r in roles if getattr(r, "source_path", "ats") != "theirstack"]
+        ts_roles = [r for r in roles if getattr(r, "source_path", "ats") == "theirstack"]
+
         try:
-            filtered_roles = filter_roles(
-                roles, config.role_filters, config,
+            filtered_ats = filter_roles(
+                ats_roles, config.role_filters, config,
                 checkpoint=cp,
                 resume_batches=resume_filter_batches,
                 resume_kept=resume_filter_kept,
-            )
+            ) if ats_roles else []
+            filtered_ts = filter_roles(
+                ts_roles, config.role_filters, config,
+                skip_title=True,
+            ) if ts_roles else []
+            filtered_roles = filtered_ats + filtered_ts
         except RateLimitError as exc:
             display_error(
                 f"Rate limit hit — {exc}\n"

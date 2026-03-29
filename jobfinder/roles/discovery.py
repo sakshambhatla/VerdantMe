@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import TYPE_CHECKING
 
-from jobfinder.config import AppConfig, get_rapidapi_key
+from jobfinder.config import AppConfig, get_rapidapi_key, get_theirstack_api_key
 from jobfinder.roles.ats import get_fetcher
 from jobfinder.roles.ats.base import ATSFetchError, UnsupportedATSError
 from jobfinder.roles.ats.career_page import fetch_career_page_roles
@@ -192,9 +192,118 @@ def discover_roles(
     log(
         f"  [dim]Pass 1 complete: {len(all_roles)} roles fetched"
         + (f" · {_n_flagged} {'company' if _n_flagged == 1 else 'companies'} "
-           f"had no public API (will try career page)" if _n_flagged else "")
+           f"had no public API (will try"
+           f"{' TheirStack →' if config.enable_theirstack else ''} career page)"
+           if _n_flagged else "")
         + "[/dim]"
     )
+
+    # ── Pass 1.5: TheirStack fallback ────────────────────────────────────────
+    # Only for flagged companies (ATS failed).  TheirStack costs credits, so
+    # we check availability before each call and respect the credit budget.
+    if config.enable_theirstack and flagged:
+        from jobfinder.roles.theirstack.client import TheirStackError, search_jobs
+        from jobfinder.roles.theirstack.credits import CreditTracker
+
+        ts_api_key = get_theirstack_api_key()
+        if not ts_api_key:
+            log(
+                "\n[dim]Pass 1.5 skipped — THEIRSTACK_API_KEY not set[/dim]",
+                level="warning",
+            )
+        else:
+            credit_tracker = CreditTracker(store, budget=config.theirstack_credit_budget)
+            ts_limit = config.theirstack_max_results
+            _n_ts_flagged = len(flagged)
+
+            log(
+                f"\n[bold]Pass 1.5 — TheirStack fallback[/bold] "
+                f"({_n_ts_flagged} {'company' if _n_ts_flagged == 1 else 'companies'}): "
+                f"searching job postings via TheirStack API "
+                f"({credit_tracker.remaining} credits remaining)..."
+            )
+
+            still_flagged: list[FlaggedCompany] = []
+            for fc in flagged:
+                if not credit_tracker.can_afford(ts_limit):
+                    log(
+                        f"  [yellow]⚠ {fc.name}: insufficient credits "
+                        f"({credit_tracker.remaining} remaining, need {ts_limit}) — skipped[/yellow]",
+                        level="warning",
+                    )
+                    still_flagged.append(fc)
+                    continue
+
+                # Cache check
+                if use_cache:
+                    cached_ts = cache.get(fc.name, "theirstack")
+                    if cached_ts is not None:
+                        all_roles.extend(cached_ts)
+                        age = cache.age_hours(fc.name, "theirstack") or 0
+                        update_registry_searchable(store, fc.name, bool(cached_ts))
+                        log(
+                            f"  [dim]{fc.name}[/dim]: "
+                            f"{len(cached_ts)} roles (cached {age:.0f}h ago)"
+                        )
+                        if on_progress:
+                            on_progress(all_roles, still_flagged)
+                        continue  # don't re-add to flagged
+
+                # Find company domain from the original companies list
+                company_domain = None
+                for c in companies:
+                    if c.name.lower() == fc.name.lower() and c.career_page_url:
+                        try:
+                            from urllib.parse import urlparse
+                            parsed = urlparse(c.career_page_url)
+                            if parsed.hostname:
+                                # Strip www. prefix for cleaner domain matching
+                                domain = parsed.hostname
+                                if domain.startswith("www."):
+                                    domain = domain[4:]
+                                company_domain = domain
+                        except Exception:
+                            pass
+                        break
+
+                with console.status(f"Searching TheirStack for {fc.name}..."):
+                    try:
+                        ts_roles = search_jobs(
+                            fc.name,
+                            company_domain=company_domain,
+                            filters=config.role_filters,
+                            config=config,
+                            api_key=ts_api_key,
+                            max_results=ts_limit,
+                        )
+                        credits_spent = len(ts_roles)
+                        credit_tracker.spend(credits_spent)
+                        all_roles.extend(ts_roles)
+                        cache.put(fc.name, "theirstack", ts_roles)
+                        if metrics:
+                            metrics.record_theirstack_fetch(fc.name, len(ts_roles), credits_spent)
+                        update_registry_searchable(store, fc.name, bool(ts_roles))
+                        log(
+                            f"  [green]✓ {fc.name}[/green]: {len(ts_roles)} roles "
+                            f"via [cyan]TheirStack[/cyan] ({credits_spent} credits, "
+                            f"{credit_tracker.remaining} remaining)",
+                            level="success",
+                        )
+                        if on_progress:
+                            on_progress(all_roles, still_flagged)
+                        # Don't add to still_flagged — company rescued
+                    except TheirStackError as exc:
+                        still_flagged.append(fc)
+                        if metrics:
+                            metrics.errors.append(f"{fc.name} (theirstack): {exc}")
+                        display_warning(f"{fc.name}: TheirStack fallback failed — {exc}")
+                    except Exception as exc:
+                        still_flagged.append(fc)
+                        if metrics:
+                            metrics.errors.append(f"{fc.name} (theirstack): {exc}")
+                        display_warning(f"{fc.name}: TheirStack unexpected error — {exc}")
+
+            flagged = still_flagged
 
     # ── Pass 2: career page fallback ─────────────────────────────────────────
     # Only run for companies where ATS failed — career page is a fallback, not

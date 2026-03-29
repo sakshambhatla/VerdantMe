@@ -172,6 +172,7 @@ def filter_roles(
     resume_kept: list[DiscoveredRole] | None = None,
     api_key: str | None = None,
     metrics: RunMetricsCollector | None = None,
+    skip_title: bool = False,
 ) -> list[DiscoveredRole]:
     """Apply LLM-based filters to a list of roles. Returns only high-confidence matches.
 
@@ -182,15 +183,25 @@ def filter_roles(
         checkpoint: If set, saves progress after each batch so the run can be resumed.
         resume_batches: Skip this many already-processed batches (used when resuming).
         resume_kept: Roles already matched in previously completed batches.
+        skip_title: If True, skip title filtering (used for TheirStack roles
+            where the title was pre-filtered server-side).
     """
+    # Apply skip_title by creating a modified filters object
+    effective_filters = filters
+    if skip_title and filters.title:
+        effective_filters = filters.model_copy(update={"title": None})
+
     # ── Short-circuit to local filter for non-LLM strategies ─────────────────
-    strategy = getattr(filters, "filter_strategy", "llm")
+    strategy = getattr(effective_filters, "filter_strategy", "llm")
     if strategy in ("fuzzy", "semantic"):
         from jobfinder.roles.local_filters import filter_roles_local
-        return filter_roles_local(roles, filters)
+        return filter_roles_local(roles, effective_filters)
 
     # ── LLM filter (original behaviour below) ─────────────────────────────────
-    active = {k: v for k, v in filters.model_dump().items() if v is not None}
+    active = {
+        k: v for k, v in effective_filters.model_dump().items()
+        if k not in ("confidence", "filter_strategy") and v is not None
+    }
     if not active:
         return roles
 
@@ -219,9 +230,9 @@ def filter_roles(
         with console.status(
             f"  Batch {batch_num}/{total_batches} ({len(batch)} roles)..."
         ):
-            prompt = _build_prompt(batch, filters)
+            prompt = _build_prompt(batch, effective_filters)
             try:
-                indices = _call_llm(prompt, filters, config, api_key=api_key)
+                indices = _call_llm(prompt, effective_filters, config, api_key=api_key)
             except RateLimitError as exc:
                 # Checkpoint progress before propagating so the caller can resume
                 if checkpoint:
