@@ -361,6 +361,111 @@ def _title_matches_semantic(role_title: str, filter_title: str, threshold: float
     return sim >= threshold
 
 
+def _filter_roles_semantic(
+    roles: list[DiscoveredRole],
+    filters: RoleFilters,
+    threshold: float,
+    *,
+    skip_title: bool = False,
+) -> list[DiscoveredRole]:
+    """Batch-embed all role texts in a single model call, then filter in memory.
+
+    Replaces the per-role embed() loop for large batches (1 call vs N calls).
+    """
+    import numpy as np
+
+    model = _get_semantic_model()
+
+    check_title = bool(filters.title and not skip_title)
+    check_location = bool(filters.location)
+
+    # ── Build a single flat list of texts to embed ────────────────────────────
+    texts: list[str] = []
+
+    filter_title_idx: int | None = None
+    if check_title:
+        filter_title_idx = len(texts)
+        texts.append(filters.title)  # type: ignore[arg-type]
+
+    # For location: embed each unique non-remote filter part once
+    loc_parts: list[str] = []
+    non_remote_parts: list[str] = []
+    has_remote_part = False
+    filter_loc_part_start: int | None = None
+
+    if check_location:
+        loc_parts = _split_location_filter(filters.location)  # type: ignore[arg-type]
+        has_remote_part = any(_is_remote_part(p) for p in loc_parts)
+        seen: set[str] = set()
+        for p in loc_parts:
+            if not _is_remote_part(p) and p not in seen:
+                non_remote_parts.append(p)
+                seen.add(p)
+        if non_remote_parts:
+            filter_loc_part_start = len(texts)
+            texts.extend(non_remote_parts)
+
+    role_title_start: int | None = None
+    if check_title:
+        role_title_start = len(texts)
+        texts.extend(r.title or "" for r in roles)
+
+    role_loc_start: int | None = None
+    if check_location:
+        role_loc_start = len(texts)
+        texts.extend(r.location or "" for r in roles)
+
+    if not texts:
+        # Nothing to embed — fall through to posted_after only
+        return [
+            r for r in roles
+            if not filters.posted_after or _posted_after_matches(r, filters.posted_after)
+        ]
+
+    # ── Single batch embed + L2-normalise ─────────────────────────────────────
+    emb = np.array(list(model.embed(texts)), dtype=np.float32)
+    norms = np.linalg.norm(emb, axis=1, keepdims=True)
+    norms[norms == 0] = 1.0
+    emb /= norms  # dot(a_norm, b_norm) == cosine(a, b)
+
+    # ── Pre-compute per-role similarity scores ────────────────────────────────
+    title_sims: "np.ndarray | None" = None
+    if check_title and filter_title_idx is not None and role_title_start is not None:
+        title_sims = emb[role_title_start : role_title_start + len(roles)] @ emb[filter_title_idx]
+
+    # Shape: (n_roles, n_non_remote_parts)
+    loc_sims: "np.ndarray | None" = None
+    if check_location and non_remote_parts and filter_loc_part_start is not None and role_loc_start is not None:
+        filter_loc_vecs = emb[filter_loc_part_start : filter_loc_part_start + len(non_remote_parts)]
+        role_loc_vecs = emb[role_loc_start : role_loc_start + len(roles)]
+        loc_sims = role_loc_vecs @ filter_loc_vecs.T  # (n_roles, n_parts)
+
+    # ── Filter ────────────────────────────────────────────────────────────────
+    matched: list[DiscoveredRole] = []
+    for i, role in enumerate(roles):
+        if check_title and title_sims is not None:
+            if float(title_sims[i]) < threshold:
+                continue
+
+        if check_location:
+            role_loc_lower = (role.location or "").lower()
+            loc_ok = False
+            if has_remote_part and any(syn in role_loc_lower for syn in _REMOTE_SYNONYMS):
+                loc_ok = True
+            if not loc_ok and loc_sims is not None:
+                if float(loc_sims[i].max()) >= threshold:
+                    loc_ok = True
+            if not loc_ok:
+                continue
+
+        if filters.posted_after and not _posted_after_matches(role, filters.posted_after):
+            continue
+
+        matched.append(role)
+
+    return matched
+
+
 # ── Location matching ─────────────────────────────────────────────────────────
 
 def _location_matches_fuzzy(role_location: str, filter_location: str, threshold: float) -> bool:
@@ -462,36 +567,31 @@ def filter_roles_local(
         + ", ".join(f"{k}={v!r}" for k, v in active_criteria.items())
     )
 
-    matched: list[DiscoveredRole] = []
+    if strategy == "semantic":
+        matched = _filter_roles_semantic(
+            roles, filters, semantic_threshold, skip_title=skip_title
+        )
+    else:
+        matched = []
+        for role in roles:
+            keep = True
 
-    for role in roles:
-        keep = True
-
-        # ── title ────────────────────────────────────────────────────────────
-        if filters.title and not skip_title:
-            if strategy == "semantic":
-                keep = _title_matches_semantic(role.title, filters.title, semantic_threshold)
-            else:
+            if filters.title and not skip_title:
                 keep = _title_matches_fuzzy(role.title, filters.title, fuzzy_threshold)
-            if not keep:
-                continue
+                if not keep:
+                    continue
 
-        # ── location ─────────────────────────────────────────────────────────
-        if filters.location:
-            if strategy == "semantic":
-                keep = _location_matches_semantic(role.location, filters.location, semantic_threshold)
-            else:
+            if filters.location:
                 keep = _location_matches_fuzzy(role.location, filters.location, fuzzy_threshold)
-            if not keep:
-                continue
+                if not keep:
+                    continue
 
-        # ── posted_after (always programmatic) ───────────────────────────────
-        if filters.posted_after:
-            keep = _posted_after_matches(role, filters.posted_after)
-            if not keep:
-                continue
+            if filters.posted_after:
+                keep = _posted_after_matches(role, filters.posted_after)
+                if not keep:
+                    continue
 
-        matched.append(role)
+            matched.append(role)
 
     log(f"  [dim]Local filter complete: {len(matched)}/{len(roles)} roles kept[/dim]")
     return matched
