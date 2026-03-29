@@ -13,11 +13,13 @@ import { useAuth } from "@/components/AuthProvider";
 import { LoginPage } from "@/components/LoginPage";
 import { ModeSelectionPage } from "@/components/ModeSelectionPage";
 import { useMode } from "@/contexts/ModeContext";
+import { useRole } from "@/contexts/RoleContext";
 import { supabase } from "@/lib/supabase";
 
 function App() {
   const { mode } = useMode();
   const { user, loading: authLoading } = useAuth();
+  const { isAtLeast } = useRole();
   const [activeTab, setActiveTab] = useState("resume");
   const location = useLocation();
   const navigate = useNavigate();
@@ -87,7 +89,7 @@ function App() {
         <div className="asymmetric-glow" />
         <div className="max-w-6xl mx-auto space-y-16">
           {renderContent()}
-          {mode === "local" && !showPipeline && <DebugLogPanel />}
+          {!showPipeline && (mode === "local" || isAtLeast("devtest")) && <DebugLogPanel />}
         </div>
       </main>
 

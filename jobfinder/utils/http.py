@@ -5,7 +5,7 @@ import time
 import httpx
 
 DEFAULT_HEADERS = {
-    "User-Agent": "JobFinder/5.2.10 (career-search-tool)",
+    "User-Agent": "JobFinder/5.3.0 (career-search-tool)",
     "Accept": "application/json",
 }
 

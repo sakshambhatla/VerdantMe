@@ -975,6 +975,21 @@ export async function saveOfferContext(
   );
 }
 
+// ─── User Role ───────────────────────────────────────────────────────────────
+
+export type UserRole = "superuser" | "devtest" | "customer" | "guest";
+
+export interface MeResponse {
+  user_id: string | null;
+  role: UserRole;
+  display_name?: string;
+}
+
+export async function getMe(): Promise<MeResponse> {
+  const { data } = await api.get<MeResponse>("/me");
+  return data;
+}
+
 // ─── Browser Agent ───────────────────────────────────────────────────────────
 
 /** Send a kill signal to a running browser agent. */

@@ -7,6 +7,8 @@ from pydantic import BaseModel, Field, field_validator
 
 KNOWN_ATS_TYPES = {"greenhouse", "lever", "ashby", "workday", "linkedin", "ycombinator", "unknown"}
 
+UserRole = Literal["superuser", "devtest", "customer", "guest"]
+
 
 class ParsedResume(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))

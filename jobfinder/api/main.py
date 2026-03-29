@@ -9,7 +9,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from jobfinder.api.routes import companies, company_runs, job_runs, logs, motivation, pipeline, resume, roles, settings, waitlist
+from jobfinder.api.routes import companies, company_runs, job_runs, logs, me, motivation, pipeline, resume, roles, settings, waitlist
 from jobfinder.config import load_config
 from jobfinder.utils.log_stream import init_log_stream
 
@@ -31,7 +31,7 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="JobFinder", version="5.2.10", lifespan=lifespan)
+app = FastAPI(title="JobFinder", version="5.3.0", lifespan=lifespan)
 
 _cors_origins = os.environ.get(
     "CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173"
@@ -53,6 +53,7 @@ app.include_router(company_runs.router, prefix="/api")
 app.include_router(job_runs.router, prefix="/api")
 app.include_router(roles.router, prefix="/api")
 app.include_router(logs.router, prefix="/api")
+app.include_router(me.router, prefix="/api")
 app.include_router(motivation.router, prefix="/api")
 app.include_router(settings.router, prefix="/api")
 app.include_router(waitlist.router, prefix="/api")

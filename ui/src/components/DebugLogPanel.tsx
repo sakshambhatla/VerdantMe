@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useMode } from "@/contexts/ModeContext";
+import { supabase } from "@/lib/supabase";
 
 interface LogEntry {
   seq: number;
@@ -23,6 +25,7 @@ export function DebugLogPanel() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const userScrolledUp = useRef(false);
   const esRef = useRef<EventSource | null>(null);
+  const { mode } = useMode();
 
   // Connect/disconnect EventSource based on expanded state
   useEffect(() => {
@@ -33,27 +36,47 @@ export function DebugLogPanel() {
       return;
     }
 
-    const es = new EventSource("/api/logs/stream");
-    esRef.current = es;
+    let cancelled = false;
 
-    es.addEventListener("log", (e) => {
-      const entry: LogEntry = JSON.parse((e as MessageEvent).data);
-      setLogs((prev) => {
-        const next = [...prev, entry];
-        return next.length > MAX_LOG_LINES ? next.slice(-MAX_LOG_LINES) : next;
+    async function connect() {
+      const _base = (import.meta.env.VITE_API_BASE_URL || "/api").replace(/\/$/, "");
+      let url = `${_base}/logs/stream`;
+
+      // Append JWT as query param in managed mode (EventSource can't send headers)
+      if (supabase && mode === "managed") {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.access_token) {
+          url += `?token=${encodeURIComponent(session.access_token)}`;
+        }
+      }
+
+      if (cancelled) return;
+
+      const es = new EventSource(url);
+      esRef.current = es;
+
+      es.addEventListener("log", (e) => {
+        const entry: LogEntry = JSON.parse((e as MessageEvent).data);
+        setLogs((prev) => {
+          const next = [...prev, entry];
+          return next.length > MAX_LOG_LINES ? next.slice(-MAX_LOG_LINES) : next;
+        });
       });
-    });
 
-    es.onopen = () => setConnected(true);
-    es.onerror = () => {
-      setConnected(false);
-    };
+      es.onopen = () => setConnected(true);
+      es.onerror = () => {
+        setConnected(false);
+      };
+    }
+
+    connect();
 
     return () => {
-      es.close();
+      cancelled = true;
+      esRef.current?.close();
       esRef.current = null;
     };
-  }, [expanded]);
+  }, [expanded, mode]);
 
   // Auto-scroll to bottom unless user has scrolled up
   useEffect(() => {

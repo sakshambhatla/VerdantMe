@@ -1,6 +1,6 @@
 [project]
 name = "jobfinder"
-version = "5.2.10"
+version = "5.3.0"
 description = "CLI tool to discover relevant companies and open roles from your resume"
 requires-python = ">=3.10"
 dependencies = [

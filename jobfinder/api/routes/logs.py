@@ -1,6 +1,6 @@
 """SSE endpoint for streaming backend logs to the UI.
 
-Disabled in managed mode (SUPABASE_URL set) to prevent cross-user data leakage.
+In managed mode, restricted to users with ``devtest`` role or higher.
 """
 from __future__ import annotations
 
@@ -12,6 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sse_starlette.sse import EventSourceResponse
 
 from jobfinder.api.auth import get_current_user
+from jobfinder.api.rbac import get_user_role, role_at_least
 from jobfinder.utils.log_stream import get_current_seq, get_logs_since
 
 router = APIRouter()
@@ -31,13 +32,18 @@ async def stream_logs(
     Clients start from the current position (no replay of historical logs).
     Multiple clients can connect simultaneously — each tracks its own cursor.
 
-    Disabled in managed mode to prevent cross-user data leakage.
+    Requires ``devtest`` role or higher in managed mode.
     """
     if os.environ.get("SUPABASE_URL"):
-        raise HTTPException(
-            status_code=403,
-            detail="Log stream is disabled in managed mode.",
-        )
+        user_id, jwt_token = _auth if _auth else (None, None)
+        if not user_id:
+            raise HTTPException(status_code=401, detail="Not authenticated")
+        role = await asyncio.to_thread(get_user_role, user_id, jwt_token)
+        if not role_at_least(role, "devtest"):
+            raise HTTPException(
+                status_code=403,
+                detail="Log stream requires devtest role or higher.",
+            )
 
     async def event_generator():
         last_seq = get_current_seq()
