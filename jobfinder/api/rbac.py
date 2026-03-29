@@ -40,7 +40,7 @@ def _fetch_role_from_db(user_id: str, jwt_token: str) -> str:
     client.postgrest.auth(jwt_token)
 
     resp = client.table("profiles").select("role").eq("id", user_id).maybe_single().execute()
-    if resp.data and resp.data.get("role"):
+    if resp and resp.data and resp.data.get("role"):
         return resp.data["role"]
     return "customer"
 
