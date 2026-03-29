@@ -105,7 +105,7 @@ export function LandingPage() {
           <div className="flex items-center gap-4">
             <button
               onClick={() => navigate("/app")}
-              className="hidden md:block text-slate-400 hover:text-white transition-colors font-medium text-sm bg-transparent border-none cursor-pointer"
+              className="text-slate-400 hover:text-white transition-colors font-medium text-sm bg-transparent border-none cursor-pointer"
             >
               Log In
             </button>
