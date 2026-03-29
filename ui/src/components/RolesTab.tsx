@@ -895,7 +895,8 @@ export function RolesTab() {
   const [provider, setProvider] = useState<string>("gemini");
   const [titleFilter, setTitleFilter] = useState("");
   const [locationFilter, setLocationFilter] = useState("");
-  const [postedAfter, setPostedAfter] = useState("");
+  const [postedWithinValue, setPostedWithinValue] = useState<number | undefined>(undefined);
+  const [postedWithinUnit, setPostedWithinUnit] = useState<"days" | "weeks" | "months">("days");
   const [scoringCriteria, setScoringCriteria] = useState("");
   const [useCache, setUseCache] = useState(false);
   const [filterStrategy, setFilterStrategy] = useState<"llm" | "fuzzy" | "semantic">("llm");
@@ -951,7 +952,7 @@ export function RolesTab() {
 
   const discover = useMutation({
     mutationFn: (resume: boolean) => {
-      const hasFilters = titleFilter || locationFilter || postedAfter;
+      const hasFilters = titleFilter || locationFilter || postedWithinValue;
       return discoverRolesStream({
         resume,
         refresh: true,
@@ -962,7 +963,8 @@ export function RolesTab() {
           ? {
               title: titleFilter || undefined,
               location: locationFilter || undefined,
-              posted_after: postedAfter || undefined,
+              posted_within_value: postedWithinValue || undefined,
+              posted_within_unit: postedWithinValue ? postedWithinUnit : undefined,
               confidence: "high",
               filter_strategy: filterStrategy,
             }
@@ -1076,13 +1078,47 @@ export function RolesTab() {
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="posted-after" className="text-white/75">Posted After</Label>
-              <Input
-                id="posted-after"
-                placeholder="e.g. Jan 1, 2026"
-                value={postedAfter}
-                onChange={(e) => setPostedAfter(e.target.value)}
-              />
+              <Label htmlFor="posted-within" className="text-white/75">Posted Within</Label>
+              <div className="flex gap-2">
+                <Input
+                  id="posted-within"
+                  type="number"
+                  min={1}
+                  max={postedWithinUnit === "months" ? 3 : postedWithinUnit === "weeks" ? 13 : 90}
+                  placeholder="e.g. 2"
+                  className="w-20"
+                  value={postedWithinValue ?? ""}
+                  onChange={(e) => {
+                    const v = e.target.value ? parseInt(e.target.value, 10) : undefined;
+                    if (v !== undefined && v < 1) return;
+                    const maxMap = { days: 90, weeks: 13, months: 3 } as const;
+                    const capped = v !== undefined ? Math.min(v, maxMap[postedWithinUnit]) : undefined;
+                    setPostedWithinValue(capped);
+                  }}
+                />
+                <select
+                  value={postedWithinUnit}
+                  onChange={(e) => {
+                    const unit = e.target.value as "days" | "weeks" | "months";
+                    setPostedWithinUnit(unit);
+                    const maxMap = { days: 90, weeks: 13, months: 3 } as const;
+                    if (postedWithinValue && postedWithinValue > maxMap[unit]) {
+                      setPostedWithinValue(maxMap[unit]);
+                    }
+                  }}
+                  className="flex h-8 rounded-lg px-2 py-1 text-sm text-white transition-colors outline-none focus-visible:ring-3 focus-visible:ring-white/20 focus-visible:border-white/40"
+                  style={{
+                    background: "rgba(255,255,255,0.10)",
+                    backdropFilter: "blur(4px)",
+                    WebkitBackdropFilter: "blur(4px)",
+                    border: "1px solid rgba(255,255,255,0.20)",
+                  }}
+                >
+                  <option value="days">days</option>
+                  <option value="weeks">weeks</option>
+                  <option value="months">months</option>
+                </select>
+              </div>
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="scoring" className="text-white/75">Relevance Criteria</Label>

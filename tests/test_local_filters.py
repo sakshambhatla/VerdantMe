@@ -279,17 +279,19 @@ class TestPostedAfterMatch:
         role = _role("SWE", posted_at="2025-12-31")
         assert _posted_after_matches(role, "Jan 1, 2026") is False
 
-    def test_no_date_excluded(self):
+    def test_no_date_included(self):
+        """Roles with no posting date are kept (not filtered out)."""
         role = _role("SWE", posted_at=None)
-        assert _posted_after_matches(role, "Jan 1, 2026") is False
+        assert _posted_after_matches(role, "Jan 1, 2026") is True
 
     def test_iso_date_format(self):
         role = _role("SWE", posted_at="2026-03-01T12:00:00Z")
         assert _posted_after_matches(role, "Feb 1, 2026") is True
 
-    def test_invalid_cutoff_returns_false(self):
+    def test_invalid_cutoff_keeps_role(self):
+        """Unparseable cutoff date → keep the role (fail open)."""
         role = _role("SWE", posted_at="2026-01-01")
-        assert _posted_after_matches(role, "not a date at all xyz") is False
+        assert _posted_after_matches(role, "not a date at all xyz") is True
 
 
 # ─── filter_roles_local integration ──────────────────────────────────────────
