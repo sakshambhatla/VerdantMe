@@ -29,6 +29,7 @@ import PipelineUpdates from "./pipeline/PipelineUpdates";
 import PipelineEntryDialog from "./pipeline/PipelineEntryDialog";
 import PipelineSyncModal from "./pipeline/PipelineSyncModal";
 import SyncSettingsDialog from "./pipeline/SyncSettingsDialog";
+import PipelineArchiveSection from "./pipeline/PipelineArchiveSection";
 
 export function PipelinePage() {
   const qc = useQueryClient();
@@ -74,6 +75,9 @@ export function PipelinePage() {
   const backlogEntries = entries.filter((e) => e.stage === "not_started");
   const blockedEntries = entries.filter((e) => e.stage === "blocked");
   const rejectedEntries = entries.filter((e) => e.stage === "rejected");
+  const archivedEntries = entries.filter((e) => e.stage === "archived");
+  const deletedEntries = entries.filter((e) => e.stage === "deleted");
+  const activeCount = entries.length - archivedEntries.length - deletedEntries.length;
 
   // ── Mutations ─────────────────────────────────────────────────────────────
 
@@ -195,6 +199,32 @@ export function PipelinePage() {
     }
   };
 
+  const handleArchive = (entry: PipelineEntry) => {
+    updateMutation.mutate({
+      id: entry.id,
+      company_name: entry.company_name,
+      role_title: entry.role_title,
+      stage: "archived" as PipelineStage,
+      note: entry.note,
+      next_action: entry.next_action,
+      badge: entry.badge as PipelineBadge | null,
+      tags: entry.tags,
+    });
+  };
+
+  const handleSoftDelete = (entry: PipelineEntry) => {
+    updateMutation.mutate({
+      id: entry.id,
+      company_name: entry.company_name,
+      role_title: entry.role_title,
+      stage: "deleted" as PipelineStage,
+      note: entry.note,
+      next_action: entry.next_action,
+      badge: entry.badge as PipelineBadge | null,
+      tags: entry.tags,
+    });
+  };
+
   const handleSync = () => {
     if (mode === "local") {
       console.info(
@@ -262,7 +292,7 @@ export function PipelinePage() {
             Tracking
           </h2>
           <p className="text-sm text-white/35 mt-0.5">
-            {entries.length} companies tracked
+            {activeCount} companies tracked
             {boardEntries.length > 0 &&
               ` \u00b7 ${boardEntries.length} active`}
           </p>
@@ -306,6 +336,8 @@ export function PipelinePage() {
         entries={boardEntries}
         onEdit={handleEdit}
         onDrop={handleDrop}
+        onArchive={handleArchive}
+        onDelete={handleSoftDelete}
       />
 
       {/* Side sections: Backlog, Blocked, Rejected */}
@@ -315,6 +347,8 @@ export function PipelinePage() {
         entries={backlogEntries}
         onEdit={handleEdit}
         onDrop={handleDrop}
+        onArchive={handleArchive}
+        onDelete={handleSoftDelete}
       />
       <PipelineSideSection
         stage="blocked"
@@ -322,11 +356,23 @@ export function PipelinePage() {
         entries={blockedEntries}
         onEdit={handleEdit}
         onDrop={handleDrop}
+        onArchive={handleArchive}
+        onDelete={handleSoftDelete}
       />
       <PipelineSideSection
         stage="rejected"
         label="Rejected"
         entries={rejectedEntries}
+        onEdit={handleEdit}
+        onDrop={handleDrop}
+        onArchive={handleArchive}
+        onDelete={handleSoftDelete}
+      />
+
+      {/* Archive & Deleted */}
+      <PipelineArchiveSection
+        archivedEntries={archivedEntries}
+        deletedEntries={deletedEntries}
         onEdit={handleEdit}
         onDrop={handleDrop}
       />

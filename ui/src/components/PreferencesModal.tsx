@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   Dialog,
   DialogContent,
@@ -54,6 +54,7 @@ export function PreferencesModal({ open, onOpenChange }: PreferencesModalProps) 
     careerFocus: "",
   });
 
+  const dialogRef = useRef<HTMLDivElement | null>(null);
   const [showApiKey, setShowApiKey] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
 
@@ -104,7 +105,7 @@ export function PreferencesModal({ open, onOpenChange }: PreferencesModalProps) 
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent ref={dialogRef} className="max-w-2xl">
         <DialogHeader>
           <DialogTitle className="text-2xl">⚙️ LLM Preferences</DialogTitle>
         </DialogHeader>
@@ -146,7 +147,7 @@ export function PreferencesModal({ open, onOpenChange }: PreferencesModalProps) 
                 <SelectTrigger id="model" className="text-xs">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent container={dialogRef}>
                   {availableModels.map((model) => (
                     <SelectItem key={model} value={model} className="text-xs">
                       {model}

@@ -670,7 +670,9 @@ export type PipelineStage =
   | "onsite"
   | "offer"
   | "blocked"
-  | "rejected";
+  | "rejected"
+  | "archived"
+  | "deleted";
 
 export type PipelineBadge = "done" | "new" | "panel" | "await" | "sched";
 

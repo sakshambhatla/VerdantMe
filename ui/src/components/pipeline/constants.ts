@@ -15,6 +15,8 @@ export const STAGE_META: Record<PipelineStage, StageMeta> = {
   offer: { label: "Offer", color: "#22c55e", bgColor: "rgba(34,197,94,0.15)" },
   blocked: { label: "Blocked", color: "#6b7280", bgColor: "rgba(107,114,128,0.12)" },
   rejected: { label: "Rejected", color: "#f43f5e", bgColor: "rgba(244,63,94,0.15)" },
+  archived: { label: "Archived", color: "#6b7280", bgColor: "rgba(107,114,128,0.10)" },
+  deleted:  { label: "Deleted",  color: "#ef4444", bgColor: "rgba(239,68,68,0.10)" },
 };
 
 /** Stages shown as Kanban columns (active pipeline only). */
@@ -33,11 +35,16 @@ export const SIDE_STAGES: PipelineStage[] = [
   "rejected",
 ];
 
+/** Stages shown in the collapsed archive section at the bottom. */
+export const ARCHIVE_STAGES: PipelineStage[] = ["archived", "deleted"];
+
 export const ALL_STAGES: PipelineStage[] = [
   "not_started",
   ...BOARD_STAGES,
   "blocked",
   "rejected",
+  "archived",
+  "deleted",
 ];
 
 /** Numeric ordering for stage progression (higher = further along). */
@@ -49,6 +56,8 @@ export const STAGE_ORDER: Record<string, number> = {
   offer: 4,
   blocked: -1,
   rejected: -1,
+  archived: -1,
+  deleted: -1,
 };
 
 /** Returns true when moving from `from` to `to` is a backward stage change. */

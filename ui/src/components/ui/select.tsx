@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import type { RefObject } from "react"
 import { Select as SelectPrimitive } from "@base-ui/react/select"
 
 import { cn } from "@/lib/utils"
@@ -59,6 +60,7 @@ function SelectTrigger({
 function SelectContent({
   className,
   children,
+  container,
   side = "bottom",
   sideOffset = 4,
   align = "center",
@@ -69,9 +71,11 @@ function SelectContent({
   Pick<
     SelectPrimitive.Positioner.Props,
     "align" | "alignOffset" | "side" | "sideOffset" | "alignItemWithTrigger"
-  >) {
+  > & {
+    container?: RefObject<HTMLElement | null>
+  }) {
   return (
-    <SelectPrimitive.Portal>
+    <SelectPrimitive.Portal container={container}>
       <SelectPrimitive.Positioner
         side={side}
         sideOffset={sideOffset}

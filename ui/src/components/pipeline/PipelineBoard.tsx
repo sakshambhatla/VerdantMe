@@ -6,9 +6,11 @@ interface Props {
   entries: PipelineEntry[];
   onEdit: (entry: PipelineEntry) => void;
   onDrop: (entryId: string, targetStage: PipelineStage, targetIndex: number) => void;
+  onArchive?: (entry: PipelineEntry) => void;
+  onDelete?: (entry: PipelineEntry) => void;
 }
 
-export default function PipelineBoard({ entries, onEdit, onDrop }: Props) {
+export default function PipelineBoard({ entries, onEdit, onDrop, onArchive, onDelete }: Props) {
   const byStage = (stage: PipelineStage) =>
     entries
       .filter((e) => e.stage === stage)
@@ -23,6 +25,8 @@ export default function PipelineBoard({ entries, onEdit, onDrop }: Props) {
           entries={byStage(stage)}
           onEdit={onEdit}
           onDrop={onDrop}
+          onArchive={onArchive}
+          onDelete={onDelete}
         />
       ))}
     </div>

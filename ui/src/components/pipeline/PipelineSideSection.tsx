@@ -9,6 +9,8 @@ interface Props {
   entries: PipelineEntry[];
   onEdit: (entry: PipelineEntry) => void;
   onDrop: (entryId: string, targetStage: PipelineStage, targetIndex: number) => void;
+  onArchive?: (entry: PipelineEntry) => void;
+  onDelete?: (entry: PipelineEntry) => void;
 }
 
 export default function PipelineSideSection({
@@ -17,6 +19,8 @@ export default function PipelineSideSection({
   entries,
   onEdit,
   onDrop,
+  onArchive,
+  onDelete,
 }: Props) {
   const [expanded, setExpanded] = useState(true);
   const [dragOver, setDragOver] = useState(false);
@@ -70,7 +74,7 @@ export default function PipelineSideSection({
             .sort((a, b) => a.sort_order - b.sort_order)
             .map((entry) => (
               <div key={entry.id} className="shrink-0 w-[200px]">
-                <PipelineCard entry={entry} onEdit={onEdit} />
+                <PipelineCard entry={entry} onEdit={onEdit} onArchive={onArchive} onDelete={onDelete} />
               </div>
             ))}
           {dragOver && (

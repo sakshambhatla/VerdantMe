@@ -8,9 +8,11 @@ interface Props {
   entries: PipelineEntry[];
   onEdit: (entry: PipelineEntry) => void;
   onDrop: (entryId: string, targetStage: PipelineStage, targetIndex: number) => void;
+  onArchive?: (entry: PipelineEntry) => void;
+  onDelete?: (entry: PipelineEntry) => void;
 }
 
-export default function PipelineColumn({ stage, entries, onEdit, onDrop }: Props) {
+export default function PipelineColumn({ stage, entries, onEdit, onDrop, onArchive, onDelete }: Props) {
   const meta = STAGE_META[stage];
   const [dragOver, setDragOver] = useState(false);
 
@@ -67,7 +69,7 @@ export default function PipelineColumn({ stage, entries, onEdit, onDrop }: Props
         }}
       >
         {entries.map((entry) => (
-          <PipelineCard key={entry.id} entry={entry} onEdit={onEdit} />
+          <PipelineCard key={entry.id} entry={entry} onEdit={onEdit} onArchive={onArchive} onDelete={onDelete} />
         ))}
         {entries.length === 0 && !dragOver && (
           <div className="text-[11px] text-white/20 text-center py-4 italic">

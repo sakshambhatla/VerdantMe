@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -51,6 +51,7 @@ export default function PipelineEntryDialog({
   const [nextAction, setNextAction] = useState("");
   const [badge, setBadge] = useState<PipelineBadge | "none">("none");
   const [tagsStr, setTagsStr] = useState("");
+  const dialogRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (entry) {
@@ -92,6 +93,7 @@ export default function PipelineEntryDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
+        ref={dialogRef}
         className="max-w-lg border"
         onPointerDownOutside={(e) => e.preventDefault()}
         onInteractOutside={(e) => e.preventDefault()}
@@ -139,7 +141,7 @@ export default function PipelineEntryDialog({
                 <SelectTrigger className="bg-white/5 border-white/10 text-white/90">
                   <SelectValue>{STAGE_META[stage].label}</SelectValue>
                 </SelectTrigger>
-                <SelectContent className="bg-[#1a1a2e] border-white/10">
+                <SelectContent container={dialogRef} className="bg-[#1a1a2e] border-white/10">
                   {ALL_STAGES.map((s) => (
                     <SelectItem key={s} value={s} className="text-white/80">
                       {STAGE_META[s].label}
@@ -157,7 +159,7 @@ export default function PipelineEntryDialog({
                     {badge === "none" ? "None" : BADGE_META[badge].label}
                   </SelectValue>
                 </SelectTrigger>
-                <SelectContent className="bg-[#1a1a2e] border-white/10">
+                <SelectContent container={dialogRef} className="bg-[#1a1a2e] border-white/10">
                   <SelectItem value="none" className="text-white/50">
                     None
                   </SelectItem>

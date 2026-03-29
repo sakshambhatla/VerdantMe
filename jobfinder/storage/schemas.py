@@ -145,7 +145,8 @@ class ExternalJobCacheEntry(BaseModel):
 # ── Pipeline ─────────────────────────────────────────────────────────────────
 
 PIPELINE_STAGES = {
-    "not_started", "outreach", "recruiter", "hm_screen", "onsite", "offer", "blocked", "rejected",
+    "not_started", "outreach", "recruiter", "hm_screen", "onsite", "offer",
+    "blocked", "rejected", "archived", "deleted",
 }
 PIPELINE_BADGES = {"done", "new", "panel", "await", "sched"}
 

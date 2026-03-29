@@ -1,15 +1,26 @@
 import type { PipelineEntry } from "@/lib/api";
 import { BADGE_META, STAGE_META } from "./constants";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 interface Props {
   entry: PipelineEntry;
   onEdit: (entry: PipelineEntry) => void;
+  onArchive?: (entry: PipelineEntry) => void;
+  onDelete?: (entry: PipelineEntry) => void;
   isDragging?: boolean;
 }
 
-export default function PipelineCard({ entry, onEdit, isDragging }: Props) {
+export default function PipelineCard({ entry, onEdit, onArchive, onDelete, isDragging }: Props) {
   const stageMeta = STAGE_META[entry.stage];
   const badgeMeta = entry.badge ? BADGE_META[entry.badge] : null;
+  const showMenu =
+    (onArchive && entry.stage !== "archived") ||
+    (onDelete && entry.stage !== "deleted");
 
   return (
     <div
@@ -19,7 +30,7 @@ export default function PipelineCard({ entry, onEdit, isDragging }: Props) {
         e.dataTransfer.effectAllowed = "move";
       }}
       onClick={() => onEdit(entry)}
-      className="cursor-pointer rounded-lg border p-3 transition-all hover:shadow-md"
+      className="group cursor-pointer rounded-lg border p-3 transition-all hover:shadow-md"
       style={{
         background: isDragging ? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.05)",
         backdropFilter: "blur(8px)",
@@ -30,7 +41,7 @@ export default function PipelineCard({ entry, onEdit, isDragging }: Props) {
         opacity: isDragging ? 0.6 : 1,
       }}
     >
-      {/* Header: company name + badge */}
+      {/* Header: company name + menu/badge */}
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="flex items-center gap-1">
@@ -63,18 +74,66 @@ export default function PipelineCard({ entry, onEdit, isDragging }: Props) {
             </div>
           )}
         </div>
-        {badgeMeta && (
-          <span
-            className="shrink-0 rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider"
-            style={{
-              background: `${badgeMeta.color}22`,
-              color: badgeMeta.color,
-              border: `1px solid ${badgeMeta.color}44`,
-            }}
-          >
-            {badgeMeta.label}
-          </span>
-        )}
+        <div className="flex items-center gap-1 shrink-0">
+          {badgeMeta && (
+            <span
+              className="shrink-0 rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider"
+              style={{
+                background: `${badgeMeta.color}22`,
+                color: badgeMeta.color,
+                border: `1px solid ${badgeMeta.color}44`,
+              }}
+            >
+              {badgeMeta.label}
+            </span>
+          )}
+          {showMenu && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  draggable={false}
+                  onDragStart={(e) => e.stopPropagation()}
+                  onClick={(e) => e.stopPropagation()}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  className="opacity-30 hover:opacity-80 transition-opacity rounded p-0.5 hover:bg-white/10"
+                >
+                  <span className="material-symbols-outlined text-[16px] text-white/50">more_vert</span>
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                align="end"
+                className="min-w-[120px] bg-[#1a1a2e] border-white/10"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {onArchive && entry.stage !== "archived" && (
+                  <DropdownMenuItem
+                    className="text-white/70 text-xs gap-2 cursor-pointer"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onArchive(entry);
+                    }}
+                  >
+                    <span className="material-symbols-outlined text-[14px]">archive</span>
+                    Archive
+                  </DropdownMenuItem>
+                )}
+                {onDelete && entry.stage !== "deleted" && (
+                  <DropdownMenuItem
+                    className="text-red-400/80 text-xs gap-2 cursor-pointer focus:text-red-400"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDelete(entry);
+                    }}
+                  >
+                    <span className="material-symbols-outlined text-[14px]">delete</span>
+                    Delete
+                  </DropdownMenuItem>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+        </div>
       </div>
 
       {/* Next action */}
