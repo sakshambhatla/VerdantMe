@@ -11,9 +11,16 @@ from pydantic import BaseModel
 SUPPORTED_PROVIDERS = ("anthropic", "gemini")
 
 
+_UNIT_TO_DAYS = {"days": 1, "weeks": 7, "months": 30}
+_MAX_AGE_DAYS = 90
+
+
 class RoleFilters(BaseModel):
     title: str | None = None        # e.g. "Engineering Manager"
-    posted_after: str | None = None # e.g. "Feb 20, 2026"
+    posted_after: str | None = None # e.g. "Feb 20, 2026" (CLI / backward compat)
+    # Deterministic date filter (UI path): "show jobs from the last X days/weeks/months"
+    posted_within_value: int | None = None   # e.g. 2
+    posted_within_unit: str | None = None    # "days" | "weeks" | "months"
     location: str | None = None     # e.g. "SF, Seattle, NY or Remote"
     confidence: str = "high"        # "high", "medium", or "low"
     # Matching strategy for title and location filters (posted_after is always programmatic)
@@ -21,6 +28,34 @@ class RoleFilters(BaseModel):
     # "fuzzy"    — local rapidfuzz token matching (instant, free, no model needed)
     # "semantic" — local ONNX embedding similarity (instant, free, requires pip install jobfinder[semantic])
     filter_strategy: str = "llm"
+
+    def to_max_age_days(self) -> int | None:
+        """Convert the date filter to ``posted_at_max_age_days`` (int, capped at 90).
+
+        Prefers the structured ``posted_within_value``/``posted_within_unit``
+        fields (from the UI).  Falls back to parsing the legacy
+        ``posted_after`` natural-language string (from the CLI).
+        """
+        # Structured path (deterministic)
+        if self.posted_within_value and self.posted_within_unit:
+            multiplier = _UNIT_TO_DAYS.get(self.posted_within_unit, 1)
+            return min(self.posted_within_value * multiplier, _MAX_AGE_DAYS)
+
+        # Legacy string path (CLI backward compat)
+        if self.posted_after:
+            try:
+                from datetime import datetime
+
+                from dateutil.parser import parse as _parse_date
+
+                cutoff = _parse_date(self.posted_after, ignoretz=True)
+                delta = datetime.now() - cutoff
+                days = max(1, int(delta.days))
+                return min(days, _MAX_AGE_DAYS)
+            except Exception:
+                return None
+
+        return None
 
 
 class AppConfig(BaseModel):

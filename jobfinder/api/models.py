@@ -13,7 +13,9 @@ class DiscoverCompaniesRequest(BaseModel):
 
 class RoleFiltersRequest(BaseModel):
     title: str | None = None
-    posted_after: str | None = None
+    posted_after: str | None = None  # legacy natural-language date (CLI backward compat)
+    posted_within_value: int | None = None   # deterministic: e.g. 2
+    posted_within_unit: str | None = None    # "days" | "weeks" | "months"
     location: str | None = None
     confidence: str = "high"
     filter_strategy: str | None = None  # "llm" | "fuzzy" | "semantic"; None → use config default

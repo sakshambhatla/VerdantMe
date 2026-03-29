@@ -44,7 +44,7 @@ Criteria semantics:
   Do NOT match roles that are a different job function.
   Example: "Engineering Manager" matches "Senior EM", "Eng Mgr", "Manager, Engineering"
            but NOT "Senior Software Engineer" or "Product Manager".
-- posted_after: Match roles posted on or after the given date. If a role has no date, EXCLUDE it.
+- posted_after: Match roles posted on or after the given date. If a role has no date, INCLUDE it (do not filter it out).
 - location: Match roles where the location clearly corresponds to any of the listed places.
   Remote/Anywhere roles match if "Remote" appears in the filter.
   Example: "SF, Seattle, NY or Remote" matches "San Francisco, CA", "New York", "Anywhere in US"
@@ -58,7 +58,15 @@ def _build_prompt(roles: list[DiscoveredRole], filters: RoleFilters) -> str:
     criteria_lines = []
     if filters.title:
         criteria_lines.append(f"title: {filters.title}")
-    if filters.posted_after:
+    # Structured date → convert to a human-readable cutoff for the LLM
+    if filters.posted_within_value and filters.posted_within_unit:
+        from datetime import datetime, timedelta
+
+        unit_days = {"days": 1, "weeks": 7, "months": 30}
+        days = min(filters.posted_within_value * unit_days.get(filters.posted_within_unit, 1), 90)
+        cutoff = datetime.now() - timedelta(days=days)
+        criteria_lines.append(f"posted_after: {cutoff.strftime('%B %d, %Y')}")
+    elif filters.posted_after:
         criteria_lines.append(f"posted_after: {filters.posted_after}")
     if filters.location:
         criteria_lines.append(f"location: {filters.location}")

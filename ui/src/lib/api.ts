@@ -343,7 +343,9 @@ export async function getCompanyRegistry(): Promise<CompanyRegistryEntry[]> {
 
 export interface RoleFiltersParams {
   title?: string;
-  posted_after?: string;
+  posted_after?: string;  // legacy natural-language date (CLI backward compat)
+  posted_within_value?: number;   // deterministic: e.g. 2
+  posted_within_unit?: "days" | "weeks" | "months";
   location?: string;
   confidence?: string;
   filter_strategy?: "llm" | "fuzzy" | "semantic";

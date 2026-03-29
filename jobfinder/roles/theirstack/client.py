@@ -13,7 +13,8 @@ import httpx
 
 from jobfinder.config import AppConfig, RoleFilters
 from jobfinder.roles.ats.base import ATSFetchError
-from jobfinder.roles.theirstack.title_broadener import broaden_title
+from jobfinder.roles.theirstack.location_mapper import map_location_to_theirstack_params
+from jobfinder.roles.theirstack.title_broadener import analyze_title
 from jobfinder.storage.schemas import DiscoveredRole
 
 THEIRSTACK_API_URL = "https://api.theirstack.com/v1/jobs/search"
@@ -27,6 +28,10 @@ def _posted_after_to_days(posted_after: str | None) -> int | None:
     """Convert a natural-language date string to ``posted_at_max_age_days``.
 
     Returns None if the date cannot be parsed or is not set.
+
+    .. deprecated:: 5.6.0
+        Use ``RoleFilters.to_max_age_days()`` instead.  Kept for any
+        callers that bypass the filter object.
     """
     if not posted_after:
         return None
@@ -77,17 +82,29 @@ def search_jobs(
     if company_domain:
         body["company_domain_or"] = [company_domain]
 
-    # Pre-filter by broadened title if available
-    if filters and filters.title:
-        broadened = broaden_title(filters.title)
-        if broadened:
-            body["job_title_or"] = [broadened]
+    if filters:
+        # ── Title + seniority + employment type ──────────────────────────────
+        if filters.title:
+            analysis = analyze_title(filters.title)
+            if analysis.broadened_title:
+                body["job_title_or"] = [analysis.broadened_title]
+            if analysis.seniority:
+                body["job_seniority_or"] = [analysis.seniority]
+            if analysis.employment_type:
+                body["employment_statuses_or"] = [analysis.employment_type]
 
-    # Convert posted_after to max age in days
-    if filters and filters.posted_after:
-        days = _posted_after_to_days(filters.posted_after)
-        if days:
-            body["posted_at_max_age_days"] = days
+        # ── Location → TheirStack params ─────────────────────────────────────
+        if filters.location:
+            loc_params = map_location_to_theirstack_params(filters.location)
+            if loc_params.get("job_location_pattern_or"):
+                body["job_location_pattern_or"] = loc_params["job_location_pattern_or"]
+            if loc_params.get("remote") is True:
+                body["remote"] = True
+
+        # ── Date → max age in days ───────────────────────────────────────────
+        max_age = filters.to_max_age_days()
+        if max_age:
+            body["posted_at_max_age_days"] = max_age
 
     headers = {
         "Authorization": f"Bearer {api_key}",

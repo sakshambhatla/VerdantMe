@@ -327,6 +327,14 @@ def _expand_metro_aliases(part: str) -> list[str]:
     return [part]
 
 
+# ── Public aliases for reuse by other modules (e.g. theirstack/location_mapper) ─
+
+split_location_filter = _split_location_filter
+is_remote_part = _is_remote_part
+expand_metro_aliases = _expand_metro_aliases
+REMOTE_SYNONYMS = _REMOTE_SYNONYMS
+
+
 def _cosine(a: "list | Any", b: "list | Any") -> float:
     """Cosine similarity between two embedding vectors."""
     import numpy as np  # fastembed brings numpy; it's a transitive dep
@@ -417,9 +425,10 @@ def _filter_roles_semantic(
 
     if not texts:
         # Nothing to embed — fall through to posted_after only
+        date_cutoff = _resolve_date_cutoff(filters)
         return [
             r for r in roles
-            if not filters.posted_after or _posted_after_matches(r, filters.posted_after)
+            if not date_cutoff or _posted_after_matches(r, date_cutoff)
         ]
 
     # ── Single batch embed + L2-normalise ─────────────────────────────────────
@@ -441,6 +450,7 @@ def _filter_roles_semantic(
         loc_sims = role_loc_vecs @ filter_loc_vecs.T  # (n_roles, n_parts)
 
     # ── Filter ────────────────────────────────────────────────────────────────
+    date_cutoff = _resolve_date_cutoff(filters)
     matched: list[DiscoveredRole] = []
     for i, role in enumerate(roles):
         if check_title and title_sims is not None:
@@ -458,7 +468,7 @@ def _filter_roles_semantic(
             if not loc_ok:
                 continue
 
-        if filters.posted_after and not _posted_after_matches(role, filters.posted_after):
+        if date_cutoff and not _posted_after_matches(role, date_cutoff):
             continue
 
         matched.append(role)
@@ -512,22 +522,39 @@ def _location_matches_semantic(role_location: str, filter_location: str, thresho
 
 # ── Date matching (shared for all non-LLM strategies) ────────────────────────
 
+def _resolve_date_cutoff(filters: "RoleFilters") -> str | None:
+    """Return a date-string cutoff from structured or legacy filter fields.
+
+    Prefers ``posted_within_value``/``posted_within_unit`` (deterministic).
+    Falls back to ``posted_after`` (natural-language string).
+    """
+    if filters.posted_within_value and filters.posted_within_unit:
+        from datetime import datetime, timedelta
+
+        unit_days = {"days": 1, "weeks": 7, "months": 30}
+        days = min(filters.posted_within_value * unit_days.get(filters.posted_within_unit, 1), 90)
+        cutoff = datetime.now() - timedelta(days=days)
+        return cutoff.strftime("%Y-%m-%d")
+    return filters.posted_after or None
+
+
 def _posted_after_matches(role: DiscoveredRole, after_str: str) -> bool:
     """Return True if the role was posted on or after the given natural-language date.
 
-    Roles with no date field are excluded (consistent with LLM filter behaviour).
+    Roles with no date field are *included* (kept) — only roles with a known
+    date older than the cutoff are excluded.
     """
     from dateutil.parser import parse as _parse_date, ParserError
 
     date_str = role.posted_at or role.published_at or role.updated_at
     if not date_str:
-        return False
+        return True  # no date → keep the role
     try:
         cutoff = _parse_date(after_str, ignoretz=True)
         role_date = _parse_date(date_str, ignoretz=True)
         return role_date >= cutoff
     except (ParserError, ValueError, OverflowError):
-        return False
+        return True  # unparseable date → keep the role
 
 
 # ── Public entry point ────────────────────────────────────────────────────────
@@ -573,6 +600,7 @@ def filter_roles_local(
         )
     else:
         matched = []
+        date_cutoff = _resolve_date_cutoff(filters)
         for role in roles:
             keep = True
 
@@ -586,8 +614,8 @@ def filter_roles_local(
                 if not keep:
                     continue
 
-            if filters.posted_after:
-                keep = _posted_after_matches(role, filters.posted_after)
+            if date_cutoff:
+                keep = _posted_after_matches(role, date_cutoff)
                 if not keep:
                     continue
 
