@@ -1,8 +1,9 @@
 {
   "mcpServers": {
     "supabase": {
-      "type": "http",
-      "url": "https://mcp.supabase.com?features=database%2Cdocs%2Cdebugging%2Cdevelopment%2Cbranching%2Cstorage"
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@supabase/mcp-server-supabase", "--access-token", "${SUPABASE_ACCESS_TOKEN}"]
     },
     "render": {
       "type": "http",

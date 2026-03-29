@@ -97,6 +97,18 @@ Server: `CORS_ORIGINS` (comma-separated; defaults to `http://localhost:5173,http
 - **SSE streaming**: browser agent streams partial results via `EventSourceResponse`; events: `jobs_batch`, `filter_result`, `score_result`, `done`, `killed`, `error`
 - **External job sources**: `roles/sources/` package for aggregator APIs (YC Jobs via RapidAPI). Runs as Pass 0 before ATS fetch when enabled. Extensible registry pattern for future RapidAPI integrations
 
+## MCP Servers
+
+The following MCP servers are configured in `.mcp.json` and available in every conversation:
+
+| Server | What it connects to | Use for |
+|--------|-------------------|---------|
+| `supabase` | Supabase Postgres (account-level PAT) | Query tables, inspect schema, run migrations, debug RLS |
+| `render` | Render API | Check service status, view deploy logs, inspect env vars |
+| `vercel` | Vercel API | Check deployments, view build/runtime logs, inspect project config |
+
+**Default behaviour when the user reports a production error**: reach for these MCP tools first before asking for logs or screenshots. The app runs on the hosted stack (Vercel frontend → Render backend → Supabase DB), so errors are almost always diagnosable via these servers directly.
+
 ## Learnings & Pitfalls
 Read `docs/docs.md` before starting major changes — it contains hard-won operational knowledge and gotchas written by the project maintainer.
 
