@@ -7,6 +7,7 @@ standard filter/score pipeline.
 
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
 
 import httpx
@@ -16,6 +17,7 @@ from jobfinder.roles.ats.base import ATSFetchError
 from jobfinder.roles.theirstack.location_mapper import map_location_to_theirstack_params
 from jobfinder.roles.theirstack.title_broadener import analyze_title
 from jobfinder.storage.schemas import DiscoveredRole
+from jobfinder.utils.log_stream import get_log_stream
 
 THEIRSTACK_API_URL = "https://api.theirstack.com/v1/jobs/search"
 
@@ -94,12 +96,15 @@ def search_jobs(
                 body["employment_statuses_or"] = [analysis.employment_type]
 
         # ── Location → TheirStack params ─────────────────────────────────────
+        # NOTE: We intentionally omit the `remote` flag even when the user
+        # requests remote jobs. TheirStack treats `remote: true` as a strict
+        # AND filter (only remote-only postings), which drastically kills recall
+        # when combined with `posted_at_max_age_days`. Location-based and
+        # remote filtering is handled by the post-fetch filter pipeline.
         if filters.location:
             loc_params = map_location_to_theirstack_params(filters.location)
             if loc_params.get("job_location_pattern_or"):
                 body["job_location_pattern_or"] = loc_params["job_location_pattern_or"]
-            if loc_params.get("remote") is True:
-                body["remote"] = True
 
         # ── Date → max age in days ───────────────────────────────────────────
         max_age = filters.to_max_age_days()
@@ -112,11 +117,19 @@ def search_jobs(
         "Accept": "application/json",
     }
 
+    _log = get_log_stream()
+    _log.info(f"TheirStack request for {company_name}: {json.dumps(body)}")
+
     try:
         with httpx.Client(timeout=config.request_timeout) as client:
             resp = client.post(THEIRSTACK_API_URL, json=body, headers=headers)
             resp.raise_for_status()
             data = resp.json()
+            _log.info(
+                f"TheirStack response for {company_name}: "
+                f"HTTP {resp.status_code}, "
+                f"{len(data.get('data', []))} jobs returned"
+            )
     except httpx.HTTPStatusError as exc:
         status = exc.response.status_code
         detail = ""

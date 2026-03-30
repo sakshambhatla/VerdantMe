@@ -30,6 +30,26 @@ sources/
   cache.py          # ExternalSourceCache: per-source TTL (12h for YC)
 ```
 
+## TheirStack Fallback (`theirstack/client.py`)
+
+Pass 1.5 — used for companies with `ats_type="unknown"` when a `THEIRSTACK_API_KEY` is present.
+
+**What we send to `/v1/jobs/search`:**
+| Field | Source | Notes |
+|-------|--------|-------|
+| `company_name_or` | company name from registry | Exact-ish match — "Shopify" works, "Amazon" (vs "Amazon.com Services LLC") may not |
+| `job_title_or` | `analyze_title(filters.title).broadened_title` | Seniority prefix stripped, abbreviations expanded |
+| `job_seniority_or` | `analyze_title(filters.title).seniority` | Only if detected (e.g. "Senior" → `"senior"`) |
+| `employment_statuses_or` | `analyze_title(filters.title).employment_type` | Only if detected (e.g. "Intern" → `"internship"`) |
+| `job_location_pattern_or` | `map_location_to_theirstack_params(filters.location)` | City/metro regex patterns |
+| `posted_at_max_age_days` | `filters.to_max_age_days()` | Converted from natural-language date |
+
+**Critical pitfalls:**
+- **Do NOT send `remote: true`** — TheirStack treats it as a strict AND (only remote-only postings), not an OR. Combined with `posted_at_max_age_days` it kills recall to near zero. Remote filtering is done post-fetch by the filter pipeline.
+- **`company_name_or` is exact-ish** — large companies with subsidiary names (e.g. Amazon is "Amazon.com Services LLC" in TheirStack) may return 0 results. No workaround currently; use the debug log to diagnose.
+- **All filters AND together** — every field you add further restricts results. TheirStack is a last-resort fallback, so prefer fewer filters for max recall.
+- **Debug logs** — `client.py` logs the full request body and response count at `INFO` level so you can see exactly what was sent and returned.
+
 ## Discovery Pipeline (`discovery.py`)
 
 Three-pass orchestrator with cache + progress callbacks:
