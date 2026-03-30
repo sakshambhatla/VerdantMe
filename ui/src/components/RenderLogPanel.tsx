@@ -78,6 +78,7 @@ export function RenderLogPanel() {
       esRef.current = es;
 
       const seenIds = new Set<string>();
+      let everConnected = false;
 
       es.addEventListener("render-log", (e) => {
         const entry: RenderLogEntry = JSON.parse((e as MessageEvent).data);
@@ -93,14 +94,17 @@ export function RenderLogPanel() {
       });
 
       es.onopen = () => {
+        everConnected = true;
         setConnected(true);
         setUnavailable(false);
       };
 
       es.onerror = () => {
         setConnected(false);
-        // If we never successfully connected, the endpoint is likely 503
-        if (es.readyState === EventSource.CLOSED) {
+        // If we never got onopen, the endpoint returned an error (e.g. 503 —
+        // missing RENDER_API_KEY/RENDER_SERVICE_ID). Browsers keep readyState
+        // as CONNECTING during retries, so we can't rely on CLOSED here.
+        if (!everConnected) {
           setUnavailable(true);
           es.close();
           esRef.current = null;
@@ -196,7 +200,9 @@ export function RenderLogPanel() {
               </p>
             ) : logs.length === 0 ? (
               <p className="text-white/25 text-xs italic py-4 text-center">
-                Connecting to Render log stream...
+                {connected
+                  ? "Connected — waiting for logs..."
+                  : "Connecting to Render log stream..."}
               </p>
             ) : (
               logs.map((entry) => (
