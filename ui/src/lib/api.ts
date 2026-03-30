@@ -348,7 +348,7 @@ export interface RoleFiltersParams {
   posted_within_unit?: "days" | "weeks" | "months";
   location?: string;
   confidence?: string;
-  filter_strategy?: "llm" | "fuzzy" | "semantic";
+  filter_strategy?: "llm" | "fuzzy" | "semantic" | "gemini-embedding";
 }
 
 export interface DiscoverRolesParams {

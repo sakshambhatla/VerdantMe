@@ -899,7 +899,7 @@ export function RolesTab() {
   const [postedWithinUnit, setPostedWithinUnit] = useState<"days" | "weeks" | "months">("days");
   const [scoringCriteria, setScoringCriteria] = useState("");
   const [useCache, setUseCache] = useState(false);
-  const [filterStrategy, setFilterStrategy] = useState<"llm" | "fuzzy" | "semantic">("llm");
+  const [filterStrategy, setFilterStrategy] = useState<"llm" | "fuzzy" | "semantic" | "gemini-embedding">("llm");
   const [skipCareerPage, setSkipCareerPage] = useState(false);
   const [enableTheirstack, setEnableTheirstack] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -1153,7 +1153,7 @@ export function RolesTab() {
               <span className="text-xs font-semibold text-white/45 uppercase tracking-wider mr-1">
                 Filter via
               </span>
-              {(["llm", "fuzzy", "semantic"] as const).map((s) => (
+              {(["llm", "fuzzy", "semantic", "gemini-embedding"] as const).map((s) => (
                 <button
                   key={s}
                   onClick={() => setFilterStrategy(s)}
@@ -1164,7 +1164,7 @@ export function RolesTab() {
                       : "bg-transparent text-white/45 border border-transparent hover:text-white/70 hover:bg-white/08",
                   ].join(" ")}
                 >
-                  {s === "llm" ? "LLM" : s === "fuzzy" ? "Fuzzy" : "Semantic"}
+                  {s === "llm" ? "LLM" : s === "fuzzy" ? "Fuzzy" : s === "semantic" ? "Semantic" : "Gemini"}
                 </button>
               ))}
               <span className="text-xs text-white/30 ml-1">
@@ -1172,7 +1172,9 @@ export function RolesTab() {
                   ? "most accurate, uses API credits"
                   : filterStrategy === "fuzzy"
                   ? "instant, free, no LLM call"
-                  : "instant, free — requires pip install jobfinder[semantic]"}
+                  : filterStrategy === "semantic"
+                  ? "instant, free — requires pip install jobfinder[semantic]"
+                  : "semantic match via Gemini API — free, no local model"}
               </span>
             </div>
           )}

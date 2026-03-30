@@ -67,7 +67,7 @@ role_filters.title          string | null     semantic job title filter
 role_filters.posted_after   string | null     natural language date
 role_filters.location       string | null     natural language location(s)
 role_filters.confidence     "high"|"medium"|"low"   default "high"
-role_filters.filter_strategy "llm"|"fuzzy"|"semantic"  default "llm"
+role_filters.filter_strategy "llm"|"fuzzy"|"semantic"|"gemini-embedding"  default "llm"
 
 relevance_score_criteria  string | null       LLM scores roles 1–10, sorted highest-first
 write_preference      "overwrite"|"merge"     merge deduplicates + re-sorts; default "overwrite"
@@ -120,10 +120,10 @@ After any major code change (new feature, significant refactor):
 
 Both must pass before committing. Quick reference:
 ```bash
-# CLI tests (64 tests covering resume parser, ATS fetchers, storage, config, API routes)
+# CLI tests (188 tests covering resume parser, ATS fetchers, storage, config, API routes, local filters)
 source .venv/bin/activate && pytest tests/ -v --tb=short
 
-# UI tests (12 tests covering ResumeTab rendering and API helpers)
+# UI tests (23 tests covering App shell, ResumeTab rendering, and API helpers)
 /Users/sakshambhatla/.nvm/versions/node/v20.20.1/bin/pnpm --dir ui test
 ```
 
