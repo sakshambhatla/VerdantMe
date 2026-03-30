@@ -233,9 +233,9 @@ def filter_roles(
 
     # ── Short-circuit to local filter for non-LLM strategies ─────────────────
     strategy = getattr(effective_filters, "filter_strategy", "llm")
-    if strategy in ("fuzzy", "semantic"):
+    if strategy in ("fuzzy", "semantic", "gemini-embedding"):
         from jobfinder.roles.local_filters import filter_roles_local
-        return filter_roles_local(roles, effective_filters)
+        return filter_roles_local(roles, effective_filters, api_key=api_key)
 
     # ── LLM filter (original behaviour below) ─────────────────────────────────
     active = {

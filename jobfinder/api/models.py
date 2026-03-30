@@ -18,7 +18,7 @@ class RoleFiltersRequest(BaseModel):
     posted_within_unit: str | None = None    # "days" | "weeks" | "months"
     location: str | None = None
     confidence: str = "high"
-    filter_strategy: str | None = None  # "llm" | "fuzzy" | "semantic"; None → use config default
+    filter_strategy: str | None = None  # "llm" | "fuzzy" | "semantic" | "gemini-embedding"; None → use config default
 
 
 class DiscoverRolesRequest(BaseModel):

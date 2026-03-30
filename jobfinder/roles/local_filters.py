@@ -1,6 +1,6 @@
 """Local (non-LLM) role filtering: fuzzy string matching and semantic embedding similarity.
 
-Both strategies avoid LLM API calls entirely, providing instant, free filtering.
+All strategies avoid LLM *generation* calls entirely, providing instant, free filtering.
 The tradeoff vs. LLM filtering is reduced semantic understanding, compensated by
 configurable confidence thresholds.
 
@@ -14,10 +14,15 @@ Usage:
     # semantic (requires: pip install "jobfinder[semantic]")
     filters = RoleFilters(title="engineering manager", filter_strategy="semantic")
     matched = filter_roles_local(roles, filters)
+
+    # gemini-embedding (requires GEMINI_API_KEY — free tier, no local model)
+    filters = RoleFilters(title="engineering manager", filter_strategy="gemini-embedding")
+    matched = filter_roles_local(roles, filters)
 """
 
 from __future__ import annotations
 
+import os
 import re
 from collections.abc import Callable
 from typing import TYPE_CHECKING
@@ -45,6 +50,14 @@ _SEMANTIC_THRESHOLDS: dict[str, float] = {
     "high":   0.72,
     "medium": 0.60,
     "low":    0.48,
+}
+
+# Gemini text-embedding-004 outputs 768-dim vectors; similarity distributions
+# are tighter than bge-small-en-v1.5.  Thresholds calibrated experimentally.
+_GEMINI_EMBED_THRESHOLDS: dict[str, float] = {
+    "high":   0.70,
+    "medium": 0.58,
+    "low":    0.45,
 }
 
 # ── Semantic model (lazy-loaded, cached per process) ─────────────────────────
@@ -528,6 +541,145 @@ def _filter_roles_semantic(
     return all_matched
 
 
+# ── Gemini Embedding API ─────────────────────────────────────────────────────
+
+_GEMINI_EMBED_MODEL = "text-embedding-004"
+_GEMINI_EMBED_BATCH = 100  # API limit per request
+
+
+def _embed_texts_gemini(texts: list[str], api_key: str | None = None) -> "np.ndarray":
+    """Embed a list of texts via Google's text-embedding-004 API.
+
+    Returns an (N, 768) float32 numpy array.  Batches at 100 texts per call.
+    """
+    import numpy as np
+    from google import genai
+
+    key = api_key or os.environ.get("GEMINI_API_KEY", "")
+    client = genai.Client(api_key=key)
+
+    all_embeddings: list[list[float]] = []
+    for i in range(0, len(texts), _GEMINI_EMBED_BATCH):
+        batch = texts[i : i + _GEMINI_EMBED_BATCH]
+        result = client.models.embed_content(
+            model=_GEMINI_EMBED_MODEL,
+            contents=batch,
+        )
+        all_embeddings.extend(e.values for e in result.embeddings)
+
+    return np.array(all_embeddings, dtype=np.float32)
+
+
+def _filter_roles_gemini_embedding(
+    roles: list[DiscoveredRole],
+    filters: RoleFilters,
+    threshold: float,
+    *,
+    skip_title: bool = False,
+    api_key: str | None = None,
+) -> list[DiscoveredRole]:
+    """Batch-embed via Gemini API, then filter using cosine similarity.
+
+    Same architecture as ``_filter_roles_semantic`` but uses a remote API
+    instead of a local ONNX model — zero memory overhead.
+    """
+    import numpy as np
+
+    check_title = bool(filters.title and not skip_title)
+    check_location = bool(filters.location)
+
+    # ── Build a single flat list of texts to embed ────────────────────────────
+    texts: list[str] = []
+
+    filter_title_idx: int | None = None
+    if check_title:
+        filter_title_idx = len(texts)
+        texts.append(filters.title)  # type: ignore[arg-type]
+
+    loc_parts: list[str] = []
+    non_remote_parts: list[str] = []
+    has_remote_part = False
+    filter_loc_part_start: int | None = None
+
+    if check_location:
+        loc_parts = _split_location_filter(filters.location)  # type: ignore[arg-type]
+        has_remote_part = any(_is_remote_part(p) for p in loc_parts)
+        seen: set[str] = set()
+        for p in loc_parts:
+            if not _is_remote_part(p) and p not in seen:
+                non_remote_parts.append(p)
+                seen.add(p)
+        if non_remote_parts:
+            filter_loc_part_start = len(texts)
+            texts.extend(non_remote_parts)
+
+    role_title_start: int | None = None
+    if check_title:
+        role_title_start = len(texts)
+        texts.extend(r.title or "" for r in roles)
+
+    role_loc_start: int | None = None
+    if check_location:
+        role_loc_start = len(texts)
+        texts.extend(r.location or "" for r in roles)
+
+    if not texts:
+        date_cutoff = _resolve_date_cutoff(filters)
+        return [
+            r for r in roles
+            if not date_cutoff or _posted_after_matches(r, date_cutoff)
+        ]
+
+    # ── Single batch embed + L2-normalise ─────────────────────────────────────
+    log("[dim]Embedding via Gemini API (text-embedding-004)…[/dim]")
+    emb = _embed_texts_gemini(texts, api_key=api_key)
+    norms = np.linalg.norm(emb, axis=1, keepdims=True)
+    norms[norms == 0] = 1.0
+    emb /= norms
+
+    # ── Per-role similarity scores ────────────────────────────────────────────
+    title_sims: "np.ndarray | None" = None
+    if check_title and filter_title_idx is not None and role_title_start is not None:
+        title_sims = emb[role_title_start : role_title_start + len(roles)] @ emb[filter_title_idx]
+
+    loc_sims: "np.ndarray | None" = None
+    if check_location and non_remote_parts and filter_loc_part_start is not None and role_loc_start is not None:
+        filter_loc_vecs = emb[filter_loc_part_start : filter_loc_part_start + len(non_remote_parts)]
+        role_loc_vecs = emb[role_loc_start : role_loc_start + len(roles)]
+        loc_sims = role_loc_vecs @ filter_loc_vecs.T
+
+    # ── Filter ────────────────────────────────────────────────────────────────
+    date_cutoff = _resolve_date_cutoff(filters)
+    matched: list[DiscoveredRole] = []
+    for i, role in enumerate(roles):
+        title_score: int | None = None
+
+        if check_title and title_sims is not None:
+            sim = float(title_sims[i])
+            if sim < threshold:
+                continue
+            title_score = int(round(sim * 100))
+
+        if check_location:
+            role_loc_lower = (role.location or "").lower()
+            loc_ok = False
+            if has_remote_part and any(syn in role_loc_lower for syn in _REMOTE_SYNONYMS):
+                loc_ok = True
+            if not loc_ok and loc_sims is not None:
+                if float(loc_sims[i].max()) >= threshold:
+                    loc_ok = True
+            if not loc_ok:
+                continue
+
+        if date_cutoff and not _posted_after_matches(role, date_cutoff):
+            continue
+
+        role.filter_score = title_score
+        matched.append(role)
+
+    return matched
+
+
 # ── Location matching ─────────────────────────────────────────────────────────
 
 def _location_matches_fuzzy(role_location: str, filter_location: str, threshold: float) -> bool:
@@ -617,16 +769,19 @@ def filter_roles_local(
     *,
     skip_title: bool = False,
     on_batch: Callable[[list[DiscoveredRole]], None] | None = None,
+    api_key: str | None = None,
 ) -> list[DiscoveredRole]:
-    """Filter roles using fuzzy or semantic matching — no LLM calls.
+    """Filter roles using fuzzy, semantic, or Gemini-embedding matching.
 
     Args:
-        roles:      Full list of raw roles to filter.
-        filters:    Filter criteria; ``filters.filter_strategy`` must be "fuzzy" or "semantic".
+        roles:   Full list of raw roles to filter.
+        filters: Filter criteria; ``filters.filter_strategy`` must be
+            ``"fuzzy"``, ``"semantic"``, or ``"gemini-embedding"``.
         skip_title: If True, skip title matching (e.g. for TheirStack roles
             where the title was pre-filtered server-side).
         on_batch:   Called with each matched batch during semantic filtering.
-            Ignored for fuzzy strategy (fast enough to return all at once).
+            Ignored for fuzzy and gemini-embedding strategies.
+        api_key: Gemini API key (required for ``"gemini-embedding"`` strategy).
 
     Returns:
         Subset of *roles* that satisfy ALL provided criteria (AND logic).
@@ -635,6 +790,7 @@ def filter_roles_local(
     confidence = filters.confidence if filters.confidence in _FUZZY_THRESHOLDS else "high"
     fuzzy_threshold = _FUZZY_THRESHOLDS[confidence]
     semantic_threshold = _SEMANTIC_THRESHOLDS[confidence]
+    gemini_threshold = _GEMINI_EMBED_THRESHOLDS[confidence]
 
     active_criteria = {
         k: v
@@ -649,7 +805,12 @@ def filter_roles_local(
         + ", ".join(f"{k}={v!r}" for k, v in active_criteria.items())
     )
 
-    if strategy == "semantic":
+    if strategy == "gemini-embedding":
+        matched = _filter_roles_gemini_embedding(
+            roles, filters, gemini_threshold,
+            skip_title=skip_title, api_key=api_key,
+        )
+    elif strategy == "semantic":
         matched = _filter_roles_semantic(
             roles, filters, semantic_threshold, skip_title=skip_title, on_batch=on_batch
         )

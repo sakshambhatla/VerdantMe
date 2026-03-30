@@ -219,18 +219,33 @@ async def discover_roles_endpoint(
         )
     companies_data = companies_data or {}
 
-    # Resolve API key if LLM features are needed.
-    # Skip the check when using local (fuzzy/semantic) filtering — no API calls needed.
+    # Resolve API key(s) for LLM features.
+    # fuzzy/semantic: no API calls needed at all.
+    # gemini-embedding: needs a Gemini key (for embedding API, not LLM generation).
+    # llm filter / scoring: needs the configured model_provider key.
     api_key: str | None = None
-    _local_strategy = (
-        config.role_filters is not None
-        and getattr(config.role_filters, "filter_strategy", "llm") in ("fuzzy", "semantic")
+    filter_api_key: str | None = None  # may differ from api_key for gemini-embedding
+    _filter_strategy = (
+        getattr(config.role_filters, "filter_strategy", "llm")
+        if config.role_filters else "llm"
     )
+    _local_strategy = _filter_strategy in ("fuzzy", "semantic", "gemini-embedding")
+
+    if _filter_strategy == "gemini-embedding":
+        try:
+            filter_api_key = resolve_api_key("gemini", user_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     if (config.role_filters and not _local_strategy) or config.relevance_score_criteria:
         try:
             api_key = resolve_api_key(config.model_provider, user_id)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    # For non-gemini-embedding strategies, filter uses the same key as scoring
+    if not filter_api_key:
+        filter_api_key = api_key
 
     # ── Determine whether to resume or start fresh ────────────────────────────
 
@@ -350,7 +365,7 @@ async def discover_roles_endpoint(
                     checkpoint=cp,
                     resume_batches=resume_filter_batches,
                     resume_kept=resume_filter_kept,
-                    api_key=api_key,
+                    api_key=filter_api_key,
                     metrics=collector,
                 )
                 if ats_roles else []
@@ -361,7 +376,7 @@ async def discover_roles_endpoint(
                     ts_roles,
                     config.role_filters,
                     config,
-                    api_key=api_key,
+                    api_key=filter_api_key,
                     skip_title=True,
                 )
                 if ts_roles else []
@@ -511,15 +526,27 @@ async def discover_roles_stream(
     companies_data = companies_data or {}
 
     api_key: str | None = None
-    _local_strategy = (
-        config.role_filters is not None
-        and getattr(config.role_filters, "filter_strategy", "llm") in ("fuzzy", "semantic")
+    filter_api_key: str | None = None
+    _filter_strategy = (
+        getattr(config.role_filters, "filter_strategy", "llm")
+        if config.role_filters else "llm"
     )
+    _local_strategy = _filter_strategy in ("fuzzy", "semantic", "gemini-embedding")
+
+    if _filter_strategy == "gemini-embedding":
+        try:
+            filter_api_key = resolve_api_key("gemini", user_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     if (config.role_filters and not _local_strategy) or config.relevance_score_criteria:
         try:
             api_key = resolve_api_key(config.model_provider, user_id)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    if not filter_api_key:
+        filter_api_key = api_key
 
     # ── SSE generator ────────────────────────────────────────────────────
 
@@ -649,7 +676,7 @@ async def discover_roles_stream(
                             checkpoint=cp,
                             resume_batches=resume_filter_batches,
                             resume_kept=resume_filter_kept,
-                            api_key=api_key,
+                            api_key=filter_api_key,
                             metrics=collector,
                         )
                         if ats_roles else []
@@ -658,7 +685,7 @@ async def discover_roles_stream(
                         await asyncio.to_thread(
                             filter_roles,
                             ts_roles, config.role_filters, config,
-                            api_key=api_key,
+                            api_key=filter_api_key,
                             skip_title=True,
                         )
                         if ts_roles else []
