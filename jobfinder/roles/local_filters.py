@@ -556,7 +556,7 @@ def _embed_texts_gemini(texts: list[str], api_key: str | None = None) -> "np.nda
     from google import genai
 
     key = api_key or os.environ.get("GEMINI_API_KEY", "")
-    client = genai.Client(api_key=key)
+    client = genai.Client(api_key=key, http_options={"api_version": "v1"})
 
     all_embeddings: list[list[float]] = []
     for i in range(0, len(texts), _GEMINI_EMBED_BATCH):
