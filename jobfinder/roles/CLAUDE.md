@@ -60,7 +60,7 @@ Three-pass orchestrator with cache + progress callbacks:
 ## LLM Filtering (`filters.py`)
 - **Batch size**: 100 roles/call
 - **Input per role**: `title | location | date` (minimal tokens)
-- **Output**: JSON array of matching 0-based indices — e.g. `[0, 3, 7]`
+- **Output**: JSON object `{"matches": [{"index": 0, "score": 92}, ...]}` — each match includes a 0-100 confidence score stored as `role.filter_score`
 - **Confidence levels**: `high` (strict) · `medium` · `low` (inclusive) — maps to different system prompt instructions
 - **Throttled**: calls `get_limiter(config.rpm_limit).wait()` before every LLM call
 - Filter criteria are all optional; if none are set, returns the full list unchanged
@@ -78,6 +78,8 @@ Non-LLM-generation alternatives — instant, free filtering:
 
 All three support metro-aware location matching with alias sets (e.g., SF/Bay Area/Silicon Valley/San Jose all match each other). Posted-after filtering uses `python-dateutil` for natural language date parsing.
 
+**`filter_score`**: All four strategies (LLM, fuzzy, semantic, gemini-embedding) set `role.filter_score` (0–100 int) on each matched role — the title match confidence. Fuzzy: `token_set_ratio` (natively 0–100). Semantic/Gemini: cosine similarity × 100. LLM: prompt-reported confidence. Displayed in the UI "Match" column. `None` when no title filter was applied.
+
 **API key threading for gemini-embedding**: The API route resolves a separate `filter_api_key` (Gemini) from the main `api_key` (model_provider, used for scoring). This allows gemini-embedding filtering with anthropic-based scoring.
 
 ## LLM Scoring (`scorer.py`)
@@ -85,7 +87,7 @@ All three support metro-aware location matching with alias sets (e.g., SF/Bay Ar
 - **Input per role**: `title | company | location | dept` (no date — not relevant to relevance)
 - **Output**: JSON object `{"0": {"score": 9, "summary": "Platform eng, Spark"}, ...}`
 - Both `score` (1–10) and `summary` (≤15 words) come from a single call
-- Sets `role.relevance_score` and `role.summary` on each `DiscoveredRole`
+- Sets `role.relevance_score` (1–10) and `role.summary` on each `DiscoveredRole`
 - Returns list sorted by `relevance_score` descending
 - `max_tokens=1024` (raised from 512 to fit summaries for large batches)
 - **Throttled**: same rate limiter as filters
