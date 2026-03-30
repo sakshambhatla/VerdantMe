@@ -52,7 +52,7 @@ _SEMANTIC_THRESHOLDS: dict[str, float] = {
     "low":    0.48,
 }
 
-# Gemini text-embedding-004 outputs 768-dim vectors; similarity distributions
+# Gemini text-embedding-005 outputs 768-dim vectors; similarity distributions
 # are tighter than bge-small-en-v1.5.  Thresholds calibrated experimentally.
 _GEMINI_EMBED_THRESHOLDS: dict[str, float] = {
     "high":   0.70,
@@ -543,12 +543,12 @@ def _filter_roles_semantic(
 
 # ── Gemini Embedding API ─────────────────────────────────────────────────────
 
-_GEMINI_EMBED_MODEL = "text-embedding-004"
+_GEMINI_EMBED_MODEL = "text-embedding-005"
 _GEMINI_EMBED_BATCH = 100  # API limit per request
 
 
 def _embed_texts_gemini(texts: list[str], api_key: str | None = None) -> "np.ndarray":
-    """Embed a list of texts via Google's text-embedding-004 API.
+    """Embed a list of texts via Google's text-embedding-005 API.
 
     Returns an (N, 768) float32 numpy array.  Batches at 100 texts per call.
     """
