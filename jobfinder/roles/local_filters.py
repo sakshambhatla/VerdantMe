@@ -544,28 +544,27 @@ def _filter_roles_semantic(
 # ── Gemini Embedding API ─────────────────────────────────────────────────────
 
 _GEMINI_EMBED_MODEL = "text-embedding-005"
-_GEMINI_EMBED_BATCH = 100  # API limit per request
 
 
 def _embed_texts_gemini(texts: list[str], api_key: str | None = None) -> "np.ndarray":
     """Embed a list of texts via Google's text-embedding-005 API.
 
-    Returns an (N, 768) float32 numpy array.  Batches at 100 texts per call.
+    Returns an (N, 768) float32 numpy array.  One embedContent call per text
+    (batchEmbedContents is not available on v1/v1beta for this model family).
     """
     import numpy as np
     from google import genai
 
     key = api_key or os.environ.get("GEMINI_API_KEY", "")
-    client = genai.Client(api_key=key, http_options={"api_version": "v1"})
+    client = genai.Client(api_key=key)
 
     all_embeddings: list[list[float]] = []
-    for i in range(0, len(texts), _GEMINI_EMBED_BATCH):
-        batch = texts[i : i + _GEMINI_EMBED_BATCH]
+    for text in texts:
         result = client.models.embed_content(
             model=_GEMINI_EMBED_MODEL,
-            contents=batch,
+            contents=text,
         )
-        all_embeddings.extend(e.values for e in result.embeddings)
+        all_embeddings.append(result.embeddings[0].values)
 
     return np.array(all_embeddings, dtype=np.float32)
 
@@ -631,7 +630,7 @@ def _filter_roles_gemini_embedding(
         ]
 
     # ── Single batch embed + L2-normalise ─────────────────────────────────────
-    log("[dim]Embedding via Gemini API (text-embedding-004)…[/dim]")
+    log(f"[dim]Embedding via Gemini API ({_GEMINI_EMBED_MODEL})…[/dim]")
     emb = _embed_texts_gemini(texts, api_key=api_key)
     norms = np.linalg.norm(emb, axis=1, keepdims=True)
     norms[norms == 0] = 1.0
