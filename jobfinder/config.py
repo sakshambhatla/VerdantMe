@@ -24,9 +24,10 @@ class RoleFilters(BaseModel):
     location: str | None = None     # e.g. "SF, Seattle, NY or Remote"
     confidence: str = "high"        # "high", "medium", or "low"
     # Matching strategy for title and location filters (posted_after is always programmatic)
-    # "llm"      — batch LLM calls (default, most accurate, uses API credits)
-    # "fuzzy"    — local rapidfuzz token matching (instant, free, no model needed)
-    # "semantic" — local ONNX embedding similarity (instant, free, requires pip install jobfinder[semantic])
+    # "llm"              — batch LLM calls (default, most accurate, uses API credits)
+    # "fuzzy"            — local rapidfuzz token matching (instant, free, no model needed)
+    # "semantic"         — local ONNX embedding similarity (instant, free, requires pip install jobfinder[semantic])
+    # "gemini-embedding" — remote Gemini text-embedding-004 API (free tier, no local model needed)
     filter_strategy: str = "llm"
 
     def to_max_age_days(self) -> int | None:

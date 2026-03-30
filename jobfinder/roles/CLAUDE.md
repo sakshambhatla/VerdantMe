@@ -68,13 +68,17 @@ Three-pass orchestrator with cache + progress callbacks:
 
 ## Local Filtering (`local_filters.py`)
 
-Non-LLM alternatives — instant, free, no API calls:
+Non-LLM-generation alternatives — instant, free filtering:
 
-**Fuzzy** (`filter_strategy="fuzzy"`): Uses rapidfuzz `token_set_ratio`. Confidence thresholds: high=82, medium=72, low=60.
+**Fuzzy** (`filter_strategy="fuzzy"`): Uses rapidfuzz `token_set_ratio`. Confidence thresholds: high=82, medium=72, low=60. Zero memory overhead.
 
-**Semantic** (`filter_strategy="semantic"`): Uses fastembed ONNX embeddings (cosine similarity). Requires `pip install "jobfinder[semantic]"`. Thresholds: high=0.55, medium=0.45, low=0.35.
+**Semantic** (`filter_strategy="semantic"`): Uses fastembed ONNX embeddings (cosine similarity). Requires `pip install "jobfinder[semantic]"`. Thresholds: high=0.72, medium=0.60, low=0.48. **Warning**: loads ~250 MB into memory (ONNX Runtime + model weights) — will OOM on Render free tier (512 MB).
 
-Both support metro-aware location matching with alias sets (e.g., SF/Bay Area/Silicon Valley/San Jose all match each other). Posted-after filtering uses `python-dateutil` for natural language date parsing.
+**Gemini Embedding** (`filter_strategy="gemini-embedding"`): Uses Google's `text-embedding-004` API via `google-genai` SDK (already a dependency). Thresholds: high=0.70, medium=0.58, low=0.45. Zero local memory overhead — all embedding done server-side by Google. Free tier (1,500 req/min). Requires `GEMINI_API_KEY`. Batches at 100 texts per API call. Recommended for hosted/managed mode.
+
+All three support metro-aware location matching with alias sets (e.g., SF/Bay Area/Silicon Valley/San Jose all match each other). Posted-after filtering uses `python-dateutil` for natural language date parsing.
+
+**API key threading for gemini-embedding**: The API route resolves a separate `filter_api_key` (Gemini) from the main `api_key` (model_provider, used for scoring). This allows gemini-embedding filtering with anthropic-based scoring.
 
 ## LLM Scoring (`scorer.py`)
 - **Batch size**: 60 roles/call
