@@ -94,7 +94,7 @@ Non-LLM-generation alternatives — instant, free filtering:
 
 **Semantic** (`filter_strategy="semantic"`): Uses fastembed ONNX embeddings (cosine similarity). Requires `pip install "jobfinder[semantic]"`. Thresholds: high=0.72, medium=0.60, low=0.48. **Warning**: loads ~250 MB into memory (ONNX Runtime + model weights) — will OOM on Render free tier (512 MB).
 
-**Gemini Embedding** (`filter_strategy="gemini-embedding"`): Uses Google's `text-embedding-004` API via `google-genai` SDK (already a dependency). Thresholds: high=0.70, medium=0.58, low=0.45. Zero local memory overhead — all embedding done server-side by Google. Free tier (1,500 req/min). Requires `GEMINI_API_KEY`. Batches at 100 texts per API call. Recommended for hosted/managed mode.
+**Gemini Embedding** (`filter_strategy="gemini-embedding"`): Uses Google's `text-embedding-005` API via `google-genai` SDK (already a dependency). Thresholds: high=0.70, medium=0.58, low=0.45. Zero local memory overhead — all embedding done server-side by Google. Free tier (1,500 req/min). Requires `GEMINI_API_KEY`. Batches at 100 texts per API call. Recommended for hosted/managed mode.
 
 All three support metro-aware location matching with alias sets (e.g., SF/Bay Area/Silicon Valley/San Jose all match each other). Posted-after filtering uses `python-dateutil` for natural language date parsing.
 
