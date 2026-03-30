@@ -58,6 +58,7 @@ class DiscoveredRole(BaseModel):
     published_at: str | None = None
     fetched_at: str = ""
     relevance_score: int | None = None
+    filter_score: int | None = None
     summary: str | None = None
     source_path: str = "ats"  # "ats" | "theirstack" — which pipeline path produced this role
 

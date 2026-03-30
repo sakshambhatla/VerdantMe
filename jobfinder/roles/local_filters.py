@@ -19,6 +19,7 @@ Usage:
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 from rapidfuzz import fuzz
@@ -375,10 +376,15 @@ def _filter_roles_semantic(
     threshold: float,
     *,
     skip_title: bool = False,
+    batch_size: int = 50,
+    on_batch: Callable[[list[DiscoveredRole]], None] | None = None,
 ) -> list[DiscoveredRole]:
-    """Batch-embed all role texts in a single model call, then filter in memory.
+    """Process roles in batches, pre-embedding filter criteria once.
 
-    Replaces the per-role embed() loop for large batches (1 call vs N calls).
+    Pre-embeds the filter title and location parts a single time, then loops
+    over *roles* in chunks of *batch_size*.  After each chunk, calls
+    ``on_batch(matched_in_this_chunk)`` if provided — callers can use this to
+    stream partial results without waiting for the full dataset.
     """
     import numpy as np
 
@@ -387,19 +393,16 @@ def _filter_roles_semantic(
     check_title = bool(filters.title and not skip_title)
     check_location = bool(filters.location)
 
-    # ── Build a single flat list of texts to embed ────────────────────────────
-    texts: list[str] = []
-
+    # ── Pre-embed filter criteria (once for all batches) ─────────────────────
+    criteria_texts: list[str] = []
     filter_title_idx: int | None = None
-    if check_title:
-        filter_title_idx = len(texts)
-        texts.append(filters.title)  # type: ignore[arg-type]
-
-    # For location: embed each unique non-remote filter part once
-    loc_parts: list[str] = []
     non_remote_parts: list[str] = []
     has_remote_part = False
     filter_loc_part_start: int | None = None
+
+    if check_title:
+        filter_title_idx = len(criteria_texts)
+        criteria_texts.append(filters.title)  # type: ignore[arg-type]
 
     if check_location:
         loc_parts = _split_location_filter(filters.location)  # type: ignore[arg-type]
@@ -410,70 +413,119 @@ def _filter_roles_semantic(
                 non_remote_parts.append(p)
                 seen.add(p)
         if non_remote_parts:
-            filter_loc_part_start = len(texts)
-            texts.extend(non_remote_parts)
+            filter_loc_part_start = len(criteria_texts)
+            criteria_texts.extend(non_remote_parts)
 
-    role_title_start: int | None = None
-    if check_title:
-        role_title_start = len(texts)
-        texts.extend(r.title or "" for r in roles)
+    criteria_emb: "np.ndarray | None" = None
+    if criteria_texts:
+        raw = np.array(list(model.embed(criteria_texts)), dtype=np.float32)
+        norms = np.linalg.norm(raw, axis=1, keepdims=True)
+        norms[norms == 0] = 1.0
+        criteria_emb = raw / norms
 
-    role_loc_start: int | None = None
-    if check_location:
-        role_loc_start = len(texts)
-        texts.extend(r.location or "" for r in roles)
-
-    if not texts:
-        # Nothing to embed — fall through to posted_after only
+    # ── Short-circuit: no embedding needed — only date (and maybe remote) ────
+    if criteria_emb is None and not (check_location and has_remote_part):
         date_cutoff = _resolve_date_cutoff(filters)
-        return [
+        matched = [
             r for r in roles
             if not date_cutoff or _posted_after_matches(r, date_cutoff)
         ]
+        if on_batch and matched:
+            on_batch(matched)
+        return matched
 
-    # ── Single batch embed + L2-normalise ─────────────────────────────────────
-    emb = np.array(list(model.embed(texts)), dtype=np.float32)
-    norms = np.linalg.norm(emb, axis=1, keepdims=True)
-    norms[norms == 0] = 1.0
-    emb /= norms  # dot(a_norm, b_norm) == cosine(a, b)
-
-    # ── Pre-compute per-role similarity scores ────────────────────────────────
-    title_sims: "np.ndarray | None" = None
-    if check_title and filter_title_idx is not None and role_title_start is not None:
-        title_sims = emb[role_title_start : role_title_start + len(roles)] @ emb[filter_title_idx]
-
-    # Shape: (n_roles, n_non_remote_parts)
-    loc_sims: "np.ndarray | None" = None
-    if check_location and non_remote_parts and filter_loc_part_start is not None and role_loc_start is not None:
-        filter_loc_vecs = emb[filter_loc_part_start : filter_loc_part_start + len(non_remote_parts)]
-        role_loc_vecs = emb[role_loc_start : role_loc_start + len(roles)]
-        loc_sims = role_loc_vecs @ filter_loc_vecs.T  # (n_roles, n_parts)
-
-    # ── Filter ────────────────────────────────────────────────────────────────
+    # ── Batch loop ────────────────────────────────────────────────────────────
     date_cutoff = _resolve_date_cutoff(filters)
-    matched: list[DiscoveredRole] = []
-    for i, role in enumerate(roles):
-        if check_title and title_sims is not None:
-            if float(title_sims[i]) < threshold:
-                continue
+    all_matched: list[DiscoveredRole] = []
 
-        if check_location:
-            role_loc_lower = (role.location or "").lower()
-            loc_ok = False
-            if has_remote_part and any(syn in role_loc_lower for syn in _REMOTE_SYNONYMS):
-                loc_ok = True
-            if not loc_ok and loc_sims is not None:
-                if float(loc_sims[i].max()) >= threshold:
+    for batch_start in range(0, len(roles), batch_size):
+        batch = roles[batch_start : batch_start + batch_size]
+
+        # Build role texts for this batch (only what's needed for cosine sims)
+        batch_texts: list[str] = []
+        role_title_start: int | None = None
+        role_loc_start: int | None = None
+
+        if check_title:
+            role_title_start = len(batch_texts)
+            batch_texts.extend(r.title or "" for r in batch)
+
+        # Only embed locations when there are non-remote parts to compare against
+        if check_location and non_remote_parts:
+            role_loc_start = len(batch_texts)
+            batch_texts.extend(r.location or "" for r in batch)
+
+        batch_emb: "np.ndarray | None" = None
+        if batch_texts:
+            raw_b = np.array(list(model.embed(batch_texts)), dtype=np.float32)
+            norms_b = np.linalg.norm(raw_b, axis=1, keepdims=True)
+            norms_b[norms_b == 0] = 1.0
+            batch_emb = raw_b / norms_b
+
+        # Compute title similarities
+        title_sims: "np.ndarray | None" = None
+        if (
+            check_title
+            and filter_title_idx is not None
+            and role_title_start is not None
+            and criteria_emb is not None
+            and batch_emb is not None
+        ):
+            title_sims = (
+                batch_emb[role_title_start : role_title_start + len(batch)]
+                @ criteria_emb[filter_title_idx]
+            )
+
+        # Compute location similarities: shape (batch_n, n_non_remote_parts)
+        loc_sims: "np.ndarray | None" = None
+        if (
+            check_location
+            and non_remote_parts
+            and filter_loc_part_start is not None
+            and role_loc_start is not None
+            and criteria_emb is not None
+            and batch_emb is not None
+        ):
+            filter_loc_vecs = criteria_emb[
+                filter_loc_part_start : filter_loc_part_start + len(non_remote_parts)
+            ]
+            role_loc_vecs = batch_emb[role_loc_start : role_loc_start + len(batch)]
+            loc_sims = role_loc_vecs @ filter_loc_vecs.T
+
+        # Filter this batch
+        batch_matched: list[DiscoveredRole] = []
+        for i, role in enumerate(batch):
+            title_score: int | None = None
+
+            if check_title and title_sims is not None:
+                sim = float(title_sims[i])
+                if sim < threshold:
+                    continue
+                title_score = int(round(sim * 100))
+
+            if check_location:
+                role_loc_lower = (role.location or "").lower()
+                loc_ok = False
+                if has_remote_part and any(syn in role_loc_lower for syn in _REMOTE_SYNONYMS):
                     loc_ok = True
-            if not loc_ok:
+                if not loc_ok and loc_sims is not None:
+                    if float(loc_sims[i].max()) >= threshold:
+                        loc_ok = True
+                if not loc_ok:
+                    continue
+
+            if date_cutoff and not _posted_after_matches(role, date_cutoff):
                 continue
 
-        if date_cutoff and not _posted_after_matches(role, date_cutoff):
-            continue
+            role.filter_score = title_score
+            batch_matched.append(role)
 
-        matched.append(role)
+        if on_batch and batch_matched:
+            on_batch(batch_matched)
 
-    return matched
+        all_matched.extend(batch_matched)
+
+    return all_matched
 
 
 # ── Location matching ─────────────────────────────────────────────────────────
@@ -564,14 +616,17 @@ def filter_roles_local(
     filters: RoleFilters,
     *,
     skip_title: bool = False,
+    on_batch: Callable[[list[DiscoveredRole]], None] | None = None,
 ) -> list[DiscoveredRole]:
     """Filter roles using fuzzy or semantic matching — no LLM calls.
 
     Args:
-        roles:   Full list of raw roles to filter.
-        filters: Filter criteria; ``filters.filter_strategy`` must be "fuzzy" or "semantic".
+        roles:      Full list of raw roles to filter.
+        filters:    Filter criteria; ``filters.filter_strategy`` must be "fuzzy" or "semantic".
         skip_title: If True, skip title matching (e.g. for TheirStack roles
             where the title was pre-filtered server-side).
+        on_batch:   Called with each matched batch during semantic filtering.
+            Ignored for fuzzy strategy (fast enough to return all at once).
 
     Returns:
         Subset of *roles* that satisfy ALL provided criteria (AND logic).
@@ -596,29 +651,28 @@ def filter_roles_local(
 
     if strategy == "semantic":
         matched = _filter_roles_semantic(
-            roles, filters, semantic_threshold, skip_title=skip_title
+            roles, filters, semantic_threshold, skip_title=skip_title, on_batch=on_batch
         )
     else:
         matched = []
         date_cutoff = _resolve_date_cutoff(filters)
         for role in roles:
-            keep = True
+            title_score: int | None = None
 
             if filters.title and not skip_title:
-                keep = _title_matches_fuzzy(role.title, filters.title, fuzzy_threshold)
-                if not keep:
+                title_score = int(fuzz.token_set_ratio(role.title.lower(), filters.title.lower()))
+                if title_score < fuzzy_threshold:
                     continue
 
             if filters.location:
-                keep = _location_matches_fuzzy(role.location, filters.location, fuzzy_threshold)
-                if not keep:
+                if not _location_matches_fuzzy(role.location, filters.location, fuzzy_threshold):
                     continue
 
             if date_cutoff:
-                keep = _posted_after_matches(role, date_cutoff)
-                if not keep:
+                if not _posted_after_matches(role, date_cutoff):
                     continue
 
+            role.filter_score = title_score
             matched.append(role)
 
     log(f"  [dim]Local filter complete: {len(matched)}/{len(roles)} roles kept[/dim]")

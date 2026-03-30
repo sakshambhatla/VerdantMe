@@ -47,6 +47,16 @@ const columns = [
     },
     sortingFn: "basic",
   }),
+  col.accessor("filter_score", {
+    header: "Match",
+    cell: (info) => {
+      const v = info.getValue();
+      if (v == null) return <span className="text-white/30">—</span>;
+      const color = v >= 80 ? "text-emerald-400" : v >= 60 ? "text-yellow-400" : "text-orange-400";
+      return <span className={`font-bold tabular-nums ${color}`}>{v}</span>;
+    },
+    sortingFn: "basic",
+  }),
   col.accessor("company_name", {
     header: "Company",
     cell: (info) => <span className="text-white/90">{info.getValue()}</span>,
@@ -903,6 +913,7 @@ export function RolesTab() {
   const [skipCareerPage, setSkipCareerPage] = useState(false);
   const [enableTheirstack, setEnableTheirstack] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [filterProgress, setFilterProgress] = useState<string | null>(null);
 
   // Pagination & tab state
   const [activeTab, setActiveTab] = useState<string>("all");
@@ -953,27 +964,34 @@ export function RolesTab() {
   const discover = useMutation({
     mutationFn: (resume: boolean) => {
       const hasFilters = titleFilter || locationFilter || postedWithinValue;
-      return discoverRolesStream({
-        resume,
-        use_cache: useCache,
-        company_names: sourceMode === "registry" ? selectedNames : undefined,
-        company_run_id: sourceMode === "pick-run" ? selectedRunId : undefined,
-        role_filters: hasFilters
-          ? {
-              title: titleFilter || undefined,
-              location: locationFilter || undefined,
-              posted_within_value: postedWithinValue || undefined,
-              posted_within_unit: postedWithinValue ? postedWithinUnit : undefined,
-              confidence: "high",
-              filter_strategy: filterStrategy,
-            }
+      setFilterProgress(null);
+      return discoverRolesStream(
+        {
+          resume,
+          use_cache: useCache,
+          company_names: sourceMode === "registry" ? selectedNames : undefined,
+          company_run_id: sourceMode === "pick-run" ? selectedRunId : undefined,
+          role_filters: hasFilters
+            ? {
+                title: titleFilter || undefined,
+                location: locationFilter || undefined,
+                posted_within_value: postedWithinValue || undefined,
+                posted_within_unit: postedWithinValue ? postedWithinUnit : undefined,
+                confidence: "high",
+                filter_strategy: filterStrategy,
+              }
+            : undefined,
+          relevance_score_criteria: scoringCriteria || undefined,
+          model_provider: provider || undefined,
+          skip_career_page: skipCareerPage || undefined,
+          enable_theirstack: enableTheirstack || undefined,
+          theirstack_max_results: enableTheirstack ? 25 : undefined,
+        },
+        undefined,
+        filterStrategy === "semantic"
+          ? (kept, total) => setFilterProgress(`Filtering… ${kept} / ${total} matched so far`)
           : undefined,
-        relevance_score_criteria: scoringCriteria || undefined,
-        model_provider: provider || undefined,
-        skip_career_page: skipCareerPage || undefined,
-        enable_theirstack: enableTheirstack || undefined,
-        theirstack_max_results: enableTheirstack ? 25 : undefined,
-      });
+      );
     },
     onSuccess: (data) => {
       qc.setQueryData(["roles"], data);
@@ -981,10 +999,12 @@ export function RolesTab() {
       qc.invalidateQueries({ queryKey: ["roles-unfiltered"] });
       qc.invalidateQueries({ queryKey: ["job-runs"] });
       setError(null);
+      setFilterProgress(null);
     },
     onError: (err: { response?: { data?: { detail?: string } }; message: string }) => {
       const detail = err.response?.data?.detail ?? err.message;
       setError(detail);
+      setFilterProgress(null);
       // Refresh checkpoint status so "Continue" banner appears
       qc.invalidateQueries({ queryKey: ["roles-checkpoint"] });
     },
@@ -1297,8 +1317,12 @@ export function RolesTab() {
               {discover.isPending ? (
                 <div className="flex flex-col items-center gap-3 py-12 text-white/55">
                   <div className="h-10 w-10 animate-spin rounded-full border-4 border-white/40 border-t-white/80" />
-                  <p className="text-sm">Filtering and scoring roles…</p>
-                  <p className="text-xs text-white/40">LLM is evaluating each role against your criteria</p>
+                  <p className="text-sm">{filterProgress ?? "Filtering and scoring roles…"}</p>
+                  <p className="text-xs text-white/40">
+                    {filterProgress
+                      ? "Semantic embeddings running in batches"
+                      : "LLM is evaluating each role against your criteria"}
+                  </p>
                 </div>
               ) : filteredRoles.length > 0 ? (
                 <>

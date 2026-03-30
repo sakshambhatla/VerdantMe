@@ -101,6 +101,7 @@ export interface DiscoveredRole {
   posted_at: string | null;
   published_at: string | null;
   relevance_score: number | null;
+  filter_score: number | null;
   summary: string | null;
 }
 
@@ -390,6 +391,7 @@ export async function discoverRoles(params: DiscoverRolesParams): Promise<RolesR
 export async function discoverRolesStream(
   params: DiscoverRolesParams,
   onProgress?: (message: string) => void,
+  onFilterResult?: (kept: number, total: number) => void,
 ): Promise<RolesResponse> {
   const baseURL = import.meta.env.VITE_API_BASE_URL || "/api";
   const headers: Record<string, string> = { "Content-Type": "application/json" };
@@ -447,6 +449,11 @@ export async function discoverRolesStream(
           const parsed = JSON.parse(dataStr);
           onProgress?.(parsed.message);
         } catch { /* ignore malformed progress */ }
+      } else if (eventType === "filter_result") {
+        try {
+          const parsed = JSON.parse(dataStr);
+          onFilterResult?.(parsed.kept as number, parsed.total as number);
+        } catch { /* ignore malformed filter_result */ }
       } else if (eventType === "done") {
         result = JSON.parse(dataStr) as RolesResponse;
       } else if (eventType === "error") {

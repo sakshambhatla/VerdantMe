@@ -50,7 +50,10 @@ Criteria semantics:
   Example: "SF, Seattle, NY or Remote" matches "San Francisco, CA", "New York", "Anywhere in US"
            but NOT "Austin, TX" or "London, UK".
 
-Return ONLY a valid JSON array of matching indices, e.g. [0, 2, 5]. No explanation, no markdown.\
+Return ONLY a valid JSON object with a "matches" array. Each entry has "index" (0-based integer) \
+and "score" (0-100 integer confidence the role matches ALL criteria).
+Example: {{"matches": [{{"index": 0, "score": 92}}, {{"index": 3, "score": 71}}]}}
+No explanation, no markdown.\
 """
 
 
@@ -90,13 +93,13 @@ def _make_system_prompt(filters: RoleFilters) -> str:
     )
 
 
-def _call_llm(prompt: str, filters: RoleFilters, config: AppConfig, *, api_key: str | None = None) -> list[int]:
+def _call_llm(prompt: str, filters: RoleFilters, config: AppConfig, *, api_key: str | None = None) -> list[tuple[int, int | None]]:
     system_prompt = _make_system_prompt(filters)
     if config.model_provider == "gemini":
         raw = _call_gemini(prompt, system_prompt, config, api_key=api_key)
     else:
         raw = _call_anthropic(prompt, system_prompt, config, api_key=api_key)
-    return _parse_indices(raw)
+    return _parse_matches(raw)
 
 
 def _call_anthropic(prompt: str, system_prompt: str, config: AppConfig, *, api_key: str | None = None) -> str:
@@ -109,7 +112,7 @@ def _call_anthropic(prompt: str, system_prompt: str, config: AppConfig, *, api_k
     try:
         response = client.messages.create(
             model=config.anthropic_model,
-            max_tokens=512,
+            max_tokens=1024,
             system=system_prompt,
             messages=[{"role": "user", "content": prompt}],
         )
@@ -157,15 +160,44 @@ def _call_gemini(prompt: str, system_prompt: str, config: AppConfig, *, api_key:
     return response.text
 
 
-def _parse_indices(raw: str) -> list[int]:
+def _parse_matches(raw: str) -> list[tuple[int, int | None]]:
+    """Parse LLM response into list of (index, score) tuples.
+
+    Handles two formats:
+    - New: {"matches": [{"index": 0, "score": 92}, ...]}
+    - Legacy fallback: [0, 2, 5] (scores will be None)
+    """
     raw = raw.strip()
-    start = raw.find("[")
+    start_obj = raw.find("{")
+    start_arr = raw.find("[")
+
+    # Try object format first
+    if start_obj != -1 and (start_arr == -1 or start_obj <= start_arr):
+        end = raw.rfind("}")
+        if end != -1:
+            try:
+                obj = json.loads(raw[start_obj : end + 1])
+                matches = obj.get("matches", [])
+                return [
+                    (
+                        m["index"],
+                        max(0, min(100, int(m["score"]))) if "score" in m else None,
+                    )
+                    for m in matches
+                    if isinstance(m, dict) and isinstance(m.get("index"), int)
+                ]
+            except (json.JSONDecodeError, KeyError, TypeError, ValueError):
+                pass
+
+    # Fallback: plain array of indices
+    if start_arr == -1:
+        return []
     end = raw.rfind("]")
-    if start == -1 or end == -1:
+    if end == -1:
         return []
     try:
-        result = json.loads(raw[start : end + 1])
-        return [i for i in result if isinstance(i, int)]
+        result = json.loads(raw[start_arr : end + 1])
+        return [(i, None) for i in result if isinstance(i, int)]
     except json.JSONDecodeError:
         return []
 
@@ -240,7 +272,7 @@ def filter_roles(
         ):
             prompt = _build_prompt(batch, effective_filters)
             try:
-                indices = _call_llm(prompt, effective_filters, config, api_key=api_key)
+                matches = _call_llm(prompt, effective_filters, config, api_key=api_key)
             except RateLimitError as exc:
                 # Checkpoint progress before propagating so the caller can resume
                 if checkpoint:
@@ -251,9 +283,10 @@ def filter_roles(
                     f"Progress saved — use 'Continue from previous run' to resume."
                 ) from exc
 
-        for i in indices:
-            if 0 <= i < len(batch):
-                matched.append(batch[i])
+        for idx, score in matches:
+            if 0 <= idx < len(batch):
+                batch[idx].filter_score = score
+                matched.append(batch[idx])
 
         # Save progress after each successful batch
         if checkpoint:

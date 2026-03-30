@@ -393,7 +393,7 @@ class TestFilterStrategyDispatching:
         filters = RoleFilters(title="engineering manager", filter_strategy="llm")
         config = AppConfig(model_provider="anthropic", rpm_limit=0)
 
-        with patch("jobfinder.roles.filters._call_llm", return_value=[0]) as mock_llm:
+        with patch("jobfinder.roles.filters._call_llm", return_value=[(0, 85)]) as mock_llm:
             result = filter_roles(roles, filters, config)
             mock_llm.assert_called_once()
 
