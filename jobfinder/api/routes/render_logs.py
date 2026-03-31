@@ -9,6 +9,7 @@ import asyncio
 import json
 import logging
 import os
+from datetime import datetime, timedelta, timezone
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -64,6 +65,10 @@ async def stream_render_logs(
     async def event_generator():
         seen_ids: set[str] = set()
         cursor_end: str | None = None
+        # Render API requires startTime; start from 1 hour ago
+        start_time = (datetime.now(timezone.utc) - timedelta(hours=1)).strftime(
+            "%Y-%m-%dT%H:%M:%SZ"
+        )
 
         async with httpx.AsyncClient(timeout=15) as client:
             try:
@@ -76,6 +81,7 @@ async def stream_render_logs(
                         "resource[]": render_service_id,
                         "direction": "backward",
                         "limit": 50,
+                        "startTime": start_time,
                     }
                     if cursor_end:
                         params["endTime"] = cursor_end
@@ -91,6 +97,24 @@ async def stream_render_logs(
                         )
                         resp.raise_for_status()
                         data = resp.json()
+                    except httpx.HTTPStatusError as exc:
+                        if 400 <= exc.response.status_code < 500:
+                            # Client error — won't fix itself; stop polling
+                            logger.error(
+                                "Render log poll got %s — stopping stream",
+                                exc.response.status_code,
+                                exc_info=True,
+                            )
+                            yield {
+                                "event": "error",
+                                "data": json.dumps(
+                                    {"detail": f"Render API error {exc.response.status_code}"}
+                                ),
+                            }
+                            break
+                        logger.warning("Render log poll failed", exc_info=True)
+                        await asyncio.sleep(POLL_INTERVAL_SECONDS)
+                        continue
                     except Exception:
                         logger.warning("Render log poll failed", exc_info=True)
                         await asyncio.sleep(POLL_INTERVAL_SECONDS)
