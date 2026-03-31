@@ -17,7 +17,7 @@ from jobfinder.roles.ats.base import ATSFetchError
 from jobfinder.roles.theirstack.location_mapper import map_location_to_theirstack_params
 from jobfinder.roles.theirstack.title_broadener import analyze_title
 from jobfinder.storage.schemas import DiscoveredRole
-from jobfinder.utils.log_stream import log as _log_stream
+from jobfinder.utils.log_stream import log
 
 THEIRSTACK_API_URL = "https://api.theirstack.com/v1/jobs/search"
 
@@ -117,14 +117,14 @@ def search_jobs(
         "Accept": "application/json",
     }
 
-    _log_stream(f"TheirStack request for {company_name}: {json.dumps(body)}", "info")
+    log(f"TheirStack request for {company_name}: {json.dumps(body)}", "info")
 
     try:
         with httpx.Client(timeout=config.request_timeout) as client:
             resp = client.post(THEIRSTACK_API_URL, json=body, headers=headers)
             resp.raise_for_status()
             data = resp.json()
-            _log_stream(
+            log(
                 f"TheirStack response for {company_name}: "
                 f"HTTP {resp.status_code}, "
                 f"{len(data.get('data', []))} jobs returned",
