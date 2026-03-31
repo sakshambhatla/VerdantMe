@@ -32,7 +32,7 @@ async def lifespan(app: FastAPI):
 
 
 
-app = FastAPI(title="JobFinder", version="5.8.6", lifespan=lifespan)
+app = FastAPI(title="JobFinder", version="5.8.7", lifespan=lifespan)
 
 _cors_origins = os.environ.get(
     "CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173"

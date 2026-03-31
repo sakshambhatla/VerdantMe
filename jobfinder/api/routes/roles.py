@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import uuid
 from datetime import datetime, timezone
 
@@ -21,6 +22,8 @@ from jobfinder.storage.registry import load_or_bootstrap_registry
 from jobfinder.storage.schemas import DiscoveredCompany, DiscoveredRole, JobRun
 from jobfinder.system_config import load_system_config
 from jobfinder.utils.log_stream import get_logs_for_run, set_run_context
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -759,6 +762,13 @@ async def discover_roles_stream(
             )
 
             yield {"event": "done", "data": json.dumps(output)}
+
+        except Exception as exc:
+            logger.exception("Unexpected error in roles discovery stream")
+            detail = str(exc)
+            if "JWT expired" in detail or "PGRST303" in detail:
+                detail = "Your session has expired — please refresh the page and try again."
+            yield {"event": "error", "data": json.dumps({"detail": detail})}
 
         finally:
             set_run_context(None)

@@ -51,6 +51,26 @@ Any OAuth scope requested in code must also be listed in the OAuth consent scree
 
 ---
 
+### 2026-03-31 Supabase JWT expiry mid-stream kills role discovery silently
+
+**Context**: Users hitting "Stream ended without a result" error when running Discover Jobs in managed mode.
+
+**Issue**: Supabase access tokens (JWTs) expire after **1 hour**. The frontend grabs the current JWT via `supabase.auth.getSession()` once at the start of `discoverRolesStream`, then passes it to the backend in the `Authorization` header. The backend uses this single token for every Supabase read/write for the entire duration of the stream. If the token was already 58+ minutes old when discovery started, it expires mid-stream. When the backend then calls `store.write()` (e.g., writing `roles_unfiltered.json` or `roles.json`), PostgREST rejects it with `postgrest.exceptions.APIError: {'message': 'JWT expired', 'code': 'PGRST303'}`. Since this exception was not caught inside `event_generator()`, the generator terminated without emitting a `done` or `error` SSE event — the stream just closed silently and the frontend showed the generic "Stream ended without a result".
+
+**This is NOT a logout issue**: the user's *session* lasts 60 days (refresh token). Only the short-lived access token expires. The Supabase JS client auto-refreshes it in the background, but once a JWT is embedded in an in-flight HTTP request, it cannot be updated mid-stream.
+
+**Symptom**: User sees "Stream ended without a result" in the UI, with no other error detail. (After the fix in this commit, the error message is now "Your session has expired — please refresh the page and try again.")
+
+**Workaround**: User refreshes the page (Supabase client issues a new access token) and re-runs discovery. The checkpoint system means roles already fetched are not re-fetched.
+
+**Potential longer-term fixes**:
+1. **Re-auth on `PGRST303`**: Backend catches `APIError` with code `PGRST303` and attempts to get a fresh token. Requires the frontend to also pass the refresh token (currently only the access token is sent) — non-trivial security consideration.
+2. **Service role for writes**: Use the Supabase service role key for the stream's write operations, bypassing RLS. Requires careful scoping to avoid data bleed between users.
+3. **Shorter-lived streams**: Break discovery into smaller chunks so each request completes in < 1 hour. Complex to implement given the current SSE architecture.
+4. **Frontend keeps token fresh**: Frontend periodically sends a "refresh" signal over a side-channel while the stream is open. Not possible with a one-shot `fetch` stream; would need WebSocket or a separate polling endpoint.
+
+---
+
 ### 2026-03-25 LLM routes must try all providers, not just the default
 **Context**: Offer analysis button ("Get me Offer insights") silently failed in managed mode.
 **Issue**: The `POST /pipeline/offer-analyses` route used `config.model_provider` (defaults to `"anthropic"`) to resolve the API key. User only had a Gemini key stored, so `resolve_api_key("anthropic", user_id)` threw a ValueError → 400 response. The mutation had no `onError` handler, so the error was swallowed with no UI feedback.
